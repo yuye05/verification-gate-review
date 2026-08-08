@@ -1,0 +1,23 @@
+{
+  "skill_name": "verification-gate-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我这边算完结果了，交付前帮我检查一下：结果数字 8.0 和 4.0 在论文和图表注记里有没有写对，还有没有旧口径的 1.11 残留在里面。项目里已有 gate_config.json，你直接跑门禁。",
+      "expected_output": "调用 scripts/check_consistency.py --config gate_config.json，产出 门禁报告_一致性.md；报告判定 PASS 或列出 FAIL/WARN 项，并把数字口径不一致的地方列清楚。",
+      "files": ["gate_config.json"]
+    },
+    {
+      "id": 2,
+      "prompt": "我把级次对齐算法从单角度改成双角度联合共享厚度了，担心新算法有系统偏差。用合成数据自检一下还原误差，配置在 gate_config.json 里，order_alignment 那几项我都填好了。",
+      "expected_output": "调用 scripts/synthetic_check.py --config gate_config.json，对 order_alignment（必要时含 fft/kurtosis）跑已知答案合成数据，输出 门禁报告_合成自检.json，报告还原误差是否小于 pass_threshold_pct（默认 0.5%），判定 PASS/FAIL。",
+      "files": ["gate_config.json"]
+    },
+    {
+      "id": 3,
+      "prompt": "最终论文要交了，帮我过一遍交付门禁：数字口径一致性 + 算法合成自检 + 对抗性审查清单，一个都别落下。有 gate_config.json，报告放在项目根目录。",
+      "expected_output": "依次执行三步门禁：(1) check_consistency.py 出 门禁报告_一致性.md；(2) synthetic_check.py 出 门禁报告_合成自检.json；(3) 针对核心结论写 对抗性审查清单.md。汇总给出 PASS/FAIL 判定，FAIL 时给出必须修改清单。",
+      "files": ["gate_config.json"]
+    }
+  ]
+}

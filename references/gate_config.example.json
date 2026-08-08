@@ -1,0 +1,78 @@
+{
+  "_doc": {
+    "authoritative_json": "权威数字来源 JSON 列表（相对本配置文件所在目录）。脚本会递归展平每个 JSON，把全部数值当作\"真值\"（结果数字必须与这些一致）。",
+    "scan_dirs": "要扫描的文档/代码/图注目录列表（相对本配置文件所在目录）。脚本从这些目录递归扫出全部文本文件。",
+    "scan_globs": "扫描的文件扩展名（.md/.txt/.json/.drawio 等）。",
+    "forbidden_numbers": "已废除的旧口径数字，出现即 FAIL（HARD）。每项 {value: 数字, label: 说明}。",
+    "forbidden_texts": "已废除的旧口径文本片段，出现即 FAIL。",
+    "whitelist": "合法但非结果的数字（物理常数、参数、波段、阈值、DOI 等）。孤儿数字候选检测时跳过这些，避免误报。",
+    "skip_dirs": "不扫描的目录名片段（备份、图、__pycache__ 等；按路径任一片段匹配）。",
+    "skip_files": "不扫描的文件名（会话备份如 findings.md/progress.md、权威来源自身等；按文件名精确匹配）。权威 JSON 来源会被脚本自动排除，无需重复写。",
+    "core_docs": "核心结果必须出现的关键文档名片段（如 'Q2_求解.md'、'图注.txt'）。核心数字在这些文档中都找不到时输出 WARN。",
+    "core_key_fragments": "标记\"核心\"权威数字的 JSON key 片段（如 'd_'、'mean'）。不配置则全部权威数字都按核心对待。",
+    "skip_key_fragments": "不提取为权威数字的 JSON key 片段（如诊断数组、谷列表 valleys、诊断 diagnostics）。用于避免把中间量当权威结果。",
+    "rel_tolerance": "权威数字匹配容差（默认 0.002 = 0.2%，另加绝对 0.002 兜底）。",
+    "output_dir": "报告落盘目录（默认=本配置文件所在目录）。",
+    "order_alignment": "合成自检【A】级次对齐还原参数。n=折射率；band=谷所在波段(cm⁻¹)；d_range=搜索域；jitter_cm1=谷位置扰动(模拟噪声)；d_true_list=要还原的厚度真值；ncos_theta_list=入射角(度)。",
+    "fft": "合成自检【B】修正轴 FFT 还原参数。band/n/d_range/r2(界面反射率，越大条纹越尖)/d_true_list。",
+    "kurtosis": "合成自检【C】kurtosis 判据自洽参数。纯正弦(n,d_true) vs 强多光束(Airy r2)。two_beam_max=两光束判为多光束的上限；strong_min=强多光束的下限。",
+    "pass_threshold_pct": "合成自检还原误差阈值（%），默认 0.5。误差超过即 FAIL。",
+    "sigma_step_cm1": "合成光谱的波数网格步长(cm⁻¹)，默认 0.5。"
+  },
+  "authoritative_json": [
+    "results/q2_results.json",
+    "results/q3_results.json"
+  ],
+  "scan_dirs": ["solution", "paper_output"],
+  "scan_globs": [".md", ".txt", ".json", ".drawio"],
+  "forbidden_numbers": [
+    { "value": 1.11, "label": "旧口径示例值 A（已废除）" },
+    { "value": 2.22, "label": "旧口径示例值 B（已废除）" },
+    { "value": 3.33, "label": "旧口径示例值 C（已废除）" }
+  ],
+  "forbidden_texts": [
+    "旧口径结论文本",
+    "已废除方法名"
+  ],
+  "whitelist": [
+    2.55, 3.42, 1.5, 400.0, 500.0, 1100.0, 1200.0, 2000.0, 0.001, 0.0001
+  ],
+  "skip_dirs": ["备份", "图", "__pycache__", ".git"],
+  "skip_files": ["findings.md", "progress.md", "task_plan.md", "backup.md"],
+  "core_docs": [
+    "Q2_求解.md",
+    "Q3_求解.md",
+    "图注.txt"
+  ],
+  "core_key_fragments": ["d_mean", "d_align", "rel_diff", "kurtosis"],
+  "skip_key_fragments": ["valleys", "diagnostics", "candidates"],
+  "rel_tolerance": 0.002,
+  "output_dir": ".",
+  "order_alignment": {
+    "n": 2.55,
+    "band": [1100, 2000],
+    "d_range": [5, 18],
+    "jitter_cm1": 0.5,
+    "d_true_list": [6.0, 8.0, 12.0],
+    "ncos_theta_list": [10, 15]
+  },
+  "fft": {
+    "band": [400, 2000],
+    "n": 3.42,
+    "d_range": [3, 5],
+    "r2": 0.3,
+    "d_true_list": [3.0, 4.0, 4.5],
+    "thetas_deg": [10, 15]
+  },
+  "kurtosis": {
+    "band": [1100, 2000],
+    "n": 2.55,
+    "r2": 0.3,
+    "d_true": 8.0,
+    "theta_deg": 10,
+    "two_beam_max": 2.5,
+    "strong_min": 3.0
+  },
+  "pass_threshold_pct": 0.5,
+  "sigma_step_cm1": 0.5
+}
