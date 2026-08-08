@@ -21,18 +21,16 @@
 ## 工作流程
 
 ```mermaid
-flowchart TD
-    A[交付数字/结论前] --> B{配置对齐<br/>gate_config.json}
-    B -->|缺失| B1[按 example 创建配置]
+flowchart LR
+    A[交付前] --> B{配置对齐}
+    B -->|缺失| B1[建 gate_config.json]
     B1 --> B
-    B -->|就绪| C[① 一致性门禁<br/>check_consistency.py]
-    C --> C1{旧口径残留?}
-    C1 -->|是| FAIL1[FAIL - 必须修]
-    C1 -->|否| D[② 合成自检<br/>synthetic_check.py]
-    D --> D1{还原误差超阈值?}
-    D1 -->|是| FAIL2[FAIL - 算法有系统偏差]
-    D1 -->|否| E[③ 对抗性审查<br/>预判质疑写答辩]
-    E --> PASS[PASS - 报告说通过才算通过]
+    B -->|就绪| C[① 一致性门禁]
+    C -->|旧口径残留| F1[FAIL 必须修]
+    C -->|通过| D[② 合成自检]
+    D -->|误差超阈值| F2[FAIL 算法有偏差]
+    D -->|通过| E[③ 对抗性审查]
+    E --> P[PASS]
 ```
 
 ## 三步门禁
