@@ -16,6 +16,7 @@
     "order_alignment": "合成自检【A】级次对齐还原参数。n=折射率；band=谷所在波段(cm⁻¹)；d_range=搜索域；jitter_cm1=谷位置扰动(模拟噪声)；d_true_list=要还原的厚度真值；ncos_theta_list=入射角(度)。",
     "fft": "合成自检【B】修正轴 FFT 还原参数。band/n/d_range/r2(界面反射率，越大条纹越尖)/d_true_list。",
     "kurtosis": "合成自检【C】kurtosis 判据自洽参数。纯正弦(n,d_true) vs 强多光束(Airy r2)。two_beam_max=两光束判为多光束的上限；strong_min=强多光束的下限。",
+    "generic_check": "通用算法自检（可插拔，任意领域，2026-09 新增）。module=被测算法 .py 路径（非相对则以配置目录为基线）；algo=函数名；cases=[{truth,inputs,extra}]；encoder=arg_list|kw_args|callback；error_fn=rel_abs|rel|abs；pass_threshold_pct=还原误差阈值(%)。不绑定光学假设，按你的算法自身假设构造合成输入。",
     "pass_threshold_pct": "合成自检还原误差阈值（%），默认 0.5。误差超过即 FAIL。",
     "sigma_step_cm1": "合成光谱的波数网格步长(cm⁻¹)，默认 0.5。"
   },

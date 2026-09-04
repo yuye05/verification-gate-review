@@ -90,12 +90,17 @@ python scripts/synthetic_check.py --config gate_config.json
 | `output_dir` | 报告落盘目录 |
 | `pass_threshold_pct` | 合成自检还原误差阈值（默认 0.5%） |
 | `order_alignment` / `fft` / `kurtosis` | 合成自检算法段（内置光学示例，见下） |
+| `generic_check` | 通用算法自检段（可插拔，任意领域算法，见下） |
 
 > 完整字段说明见 [references/gate_config.example.json](references/gate_config.example.json) 的 `_doc` 段。
 
 ### 合成自检的内置示例
 
 `gate_config.example.json` 内置了一组光学厚度测量示例（级次对齐 / 修正轴 FFT / kurtosis 判据），展示"如何为自己的算法写合成数据自检"。被测算法不同时，按算法自身假设改写对应实现即可——**合成数据必须按被测算法的假设构造，不能喂与假设错位的理想输入**。
+
+### 通用算法自检 generic_check（任意领域）
+
+不想用内置示例时，在 `gate_config.json` 里填一个 `generic_check` 段即可把**任意领域算法**纳入自检：声明 `module`（算法 `.py` 路径）、`algo`（函数名）、`cases`（已知真值 + 合成输入）、`error_fn`（误差度量）、`pass_threshold_pct`（还原误差阈值，默认 0.5%）。脚本按你的算法自身假设构造合成输入，还原误差超阈值即 FAIL。配置格式见 [references/gate_config.example.json](references/gate_config.example.json) 的 `_doc` 段。
 
 ---
 
@@ -115,6 +120,7 @@ python scripts/synthetic_check.py --config gate_config.json
 verification-gate-review/
 ├── README.md                          # 本文档
 ├── SKILL.md                           # Claude Code skill 定义
+├── AUTHORSHIP.md                      # AI 辅助工作的作者记录
 ├── requirements.txt                   # 依赖：numpy / scipy
 ├── LICENSE                            # MIT
 ├── .gitignore
@@ -165,4 +171,4 @@ A: 一致性门禁查"数字写没写对"（口径一致、无旧残留）；合
 
 ## 许可证
 
-MIT
+[MIT](LICENSE) · AI 辅助工作的作者记录见 [AUTHORSHIP.md](AUTHORSHIP.md)。
