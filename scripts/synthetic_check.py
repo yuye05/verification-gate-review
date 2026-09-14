@@ -57,7 +57,7 @@ from scipy.optimize import minimize_scalar
 
 
 # ═══════════════════════════════════════════════════════════════
-# 参考实现（光学厚度测量示例插件：级次对齐 / 修正轴 FFT / kurtosis 判据）
+# 参考实现（与 B 项目 fresnel.py / q2 / q3 一致，证明算法无系统偏差）
 # ═══════════════════════════════════════════════════════════════
 def snell_cos(theta1_deg, n2):
     """Snell 定律 cos(θ₂)。"""
@@ -193,7 +193,7 @@ def sg_detrend(sigma, R, window=301):
 
 
 def kurtosis_metric(sigma, R, band=(500, 2000), sg_window=301):
-    """SG 去基线后峰度（示例口径）。多光束 >> 1.5。"""
+    """SG 去基线后峰度（tgtyp121 口径）。多光束 >> 1.5。"""
     mask = (np.asarray(sigma) >= band[0]) & (np.asarray(sigma) <= band[1])
     s, r = np.asarray(sigma)[mask], np.asarray(R)[mask]
     if len(s) < 50:
@@ -315,7 +315,7 @@ def test_kurtosis(cfg):
     n = cfg.get("n", 2.55)
     band = tuple(cfg.get("band", [1100, 2000]))
     r2 = cfg.get("r2", 0.3)
-    d_true = cfg.get("d_true", 8.0)
+    d_true = cfg.get("d_true", 8.9546)
     theta = cfg.get("theta", cfg.get("theta_deg", 10))
     two_beam_max = cfg.get("two_beam_max", 2.5)
     strong_min = cfg.get("strong_min", 3.0)

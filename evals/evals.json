@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "我这边算完结果了，交付前帮我检查一下：结果数字 8.0 和 4.0 在论文和图表注记里有没有写对，还有没有旧口径的 1.11 残留在里面。项目里已有 gate_config.json，你直接跑门禁。",
+      "prompt": "我这边算完厚度了，交付前帮我检查一下：结果数字 8.9546 和 3.9105 在论文和图表注记里有没有写对，还有没有旧口径的 3.8517 残留在里面。项目里已有 gate_config.json，你直接跑门禁。",
       "expected_output": "调用 scripts/check_consistency.py --config gate_config.json，产出 门禁报告_一致性.md；报告判定 PASS 或列出 FAIL/WARN 项，并把数字口径不一致的地方列清楚。",
       "files": ["gate_config.json"]
     },

@@ -33,7 +33,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-# ── 默认值 ────────────────────────────────────────────────────
+# ── 默认值（与已验证通过的 B 项目口径一致）──────────────────────
 DEFAULT_GLOBS = {".md", ".txt", ".json", ".drawio"}
 DEFAULT_SKIP_DIRS = {"__pycache__", ".git", ".claude"}
 DEFAULT_REL_TOL = 0.002          # 权威数字匹配容差：相对 0.2% 或绝对 0.002

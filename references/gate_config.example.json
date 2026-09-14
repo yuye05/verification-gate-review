@@ -16,7 +16,6 @@
     "order_alignment": "合成自检【A】级次对齐还原参数。n=折射率；band=谷所在波段(cm⁻¹)；d_range=搜索域；jitter_cm1=谷位置扰动(模拟噪声)；d_true_list=要还原的厚度真值；ncos_theta_list=入射角(度)。",
     "fft": "合成自检【B】修正轴 FFT 还原参数。band/n/d_range/r2(界面反射率，越大条纹越尖)/d_true_list。",
     "kurtosis": "合成自检【C】kurtosis 判据自洽参数。纯正弦(n,d_true) vs 强多光束(Airy r2)。two_beam_max=两光束判为多光束的上限；strong_min=强多光束的下限。",
-    "generic_check": "通用算法自检（可插拔，任意领域，2026-09 新增）。module=被测算法 .py 路径（非相对则以配置目录为基线）；algo=函数名；cases=[{truth,inputs,extra}]；encoder=arg_list|kw_args|callback；error_fn=rel_abs|rel|abs；pass_threshold_pct=还原误差阈值(%)。不绑定光学假设，按你的算法自身假设构造合成输入。",
     "pass_threshold_pct": "合成自检还原误差阈值（%），默认 0.5。误差超过即 FAIL。",
     "sigma_step_cm1": "合成光谱的波数网格步长(cm⁻¹)，默认 0.5。"
   },
@@ -27,9 +26,9 @@
   "scan_dirs": ["solution", "paper_output"],
   "scan_globs": [".md", ".txt", ".json", ".drawio"],
   "forbidden_numbers": [
-    { "value": 1.11, "label": "旧口径示例值 A（已废除）" },
-    { "value": 2.22, "label": "旧口径示例值 B（已废除）" },
-    { "value": 3.33, "label": "旧口径示例值 C（已废除）" }
+    { "value": 3.8517, "label": "旧口径 Si 厚度（已废除）" },
+    { "value": 2433.0, "label": "旧口径 ΔAIC（已废除）" },
+    { "value": 3.15,   "label": "旧口径 Finesse（已废除）" }
   ],
   "forbidden_texts": [
     "旧口径结论文本",
@@ -54,7 +53,7 @@
     "band": [1100, 2000],
     "d_range": [5, 18],
     "jitter_cm1": 0.5,
-    "d_true_list": [6.0, 8.0, 12.0],
+    "d_true_list": [6.0, 8.9546, 12.0],
     "ncos_theta_list": [10, 15]
   },
   "fft": {
@@ -62,14 +61,14 @@
     "n": 3.42,
     "d_range": [3, 5],
     "r2": 0.3,
-    "d_true_list": [3.0, 4.0, 4.5],
+    "d_true_list": [3.0, 3.9105, 4.5],
     "thetas_deg": [10, 15]
   },
   "kurtosis": {
     "band": [1100, 2000],
     "n": 2.55,
     "r2": 0.3,
-    "d_true": 8.0,
+    "d_true": 8.9546,
     "theta_deg": 10,
     "two_beam_max": 2.5,
     "strong_min": 3.0
