@@ -1,0 +1,4 @@
+{
+  "output_dir": "reports/negative_control",
+  "model_check": {"model": "order_model_buggy.json", "max_states": 100}
+}

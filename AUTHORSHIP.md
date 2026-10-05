@@ -1,6 +1,6 @@
 # Authorship
 
-*Last updated: 2026-09-04*
+*Last updated: 2026-10-06*
 
 This file documents the **human creative contribution** behind
 `verification-gate-review`. Copyright protection for AI-assisted works depends on
@@ -18,20 +18,26 @@ Contact: 3474682031@qq.com
 - **Config-driven single entry point.** Design the gate around one
   `gate_config.json` (the only input), rather than hard-coding per-project
   assumptions — so the skill is reusable across projects and results.
-- **Three-gate architecture.** Split verification into ① consistency (number
-  caliber), ② synthetic self-check (algorithm bias), ③ adversarial review —
-  three complementary PASS/FAIL gates, not one monolithic check.
+- **Three-gate architecture.** Split verification into ① numerical consistency,
+  ② synthetic self-check and optional model checks, ③ adversarial review —
+  three complementary evidence stages, with human review retained.
 - **Built-in optical examples + a pluggable `generic_check`.** Keep the real
   built-in cases (order alignment / FFT / kurtosis) as worked examples, and add a
   config-driven `generic_check` path so *any* domain algorithm can be verified
   without bound to optical assumptions.
 - **MIT license + Python-only `requirements.txt`** (`numpy`, `scipy`) — minimal,
   dependency-light distribution. (Evidence: git log, `LICENSE`, `requirements.txt`.)
+- **Scope and module boundaries for the 2026 extension.** The maintainer set the
+  goal of connecting the tool to formal and model-driven software engineering,
+  required the existing three-layer structure to remain, and directed the work
+  toward practical, reproducible improvements. The optional model-checking module
+  follows that scope without introducing a new delivery stage or dependency.
+  (Evidence: maintainer instructions of 2026-10-05; `references/design-notes.md`.)
 
 ## Exercise of Judgment
 
-- **"Construct inputs per the algorithm's own assumptions"** — the README FAQ and
-  built-in example docs call out that a synthetic self-check that feeds
+- **"Construct inputs per the algorithm's own assumptions"** — the configuration
+  reference and built-in example docs call out that a synthetic self-check that feeds
   assumption-misaligned inputs fails on the generator, not the algorithm. Human
   judgment encoded this guardrail.
 - **"Report PASS only if machine-reproducible"** — replaced eyeball/recall
@@ -40,6 +46,12 @@ Contact: 3474682031@qq.com
 - **Refined the flow diagram into a horizontal compact layout**, and expanded the
   README with flow/decision tables, full config-field documentation, and a FAQ
   (git log: `压缩工作流程图布局为横向紧凑版`, `扩写README：流程图/判定表/配置字段/FAQ`).
+- **Acceptance and publication control.** The maintainer requires observable
+  validation, reviews the delivered functionality and evidence, determines the
+  publication scope, and requested cleanup and documentation before the final
+  submission. The acceptance evidence includes correct and defective examples,
+  failure exit codes, and explicit limits on what a PASS establishes.
+  (Evidence: maintainer instructions of 2026-10-05/06; `evals/check_regressions.py`.)
 
 ## Goal Setting & Direction
 
@@ -47,30 +59,32 @@ Contact: 3474682031@qq.com
   document calibers, produce a machine-reproducible PASS/FAIL report instead of a
   human promise of "I checked it, it's fine."
 - **Intended users:** math-modeling contestants and paper writers delivering
-  results; anyone who must prove a number was computed correctly and not carry a
-  stale caliber.
+  results; anyone who needs to check numerical consistency and document the
+  evidence and limits of algorithm or model checks.
 - **Goals / non-goals:** config-driven, reproducible, explainable for technical
   contexts; explicitly **not** an article-structure/logic auditor (README
-  *不适用* section).
+  *能力边界* section).
+- **Research and learning direction:** connect numerical delivery checks with
+  explicit requirements, finite models and counterexamples. This direction and
+  the instruction to preserve the original framework were supplied by the
+  maintainer; implementation details were developed with tool assistance.
 
 ## Art Direction
 
-- **Text-first, minimal documentation**; a single Mermaid flow graph to convey the
-  three-gate pipeline at a glance.
-- **Three-line tables** for decision logic (gate → result → meaning) and the
+- **Text-first documentation**; the original compact Mermaid layout and the
+  current tables express the three-layer workflow and its checks.
+- **Concise tables** for decision logic (gate → result → meaning) and the
   config field reference.
 - **Tone:** concise, technical, no marketing fluff — the README opens with the
   problem statement, not a tagline.
 
 ## AI Implementation
 
-Code implementation was assisted by **Claude Code (Anthropic)**, with the skill
-markdown authored and edited in an agentic loop. The AI generated syntax, function
-bodies, and boilerplate under human architectural direction and iterative review.
-The human author provided the specifications, constraints, design rules, iterative
-review and refinement, and all debugging and integration decisions. Development
-session logs are retained locally as contemporaneous evidence of the creative
-direction process.
+**Claude Code (Anthropic)** and **Codex (OpenAI)** assisted with code implementation,
+documentation and validation under the maintainer's goals, architecture and scope
+constraints. Human contributions centre on requirements, functional organisation,
+research direction, review and acceptance, and final publication decisions.
+Development conversation records remain local.
 
 ## Legal & Copyright
 

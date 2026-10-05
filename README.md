@@ -1,174 +1,127 @@
 # verification-gate-review
 
-交付数字结果 / 算法结论 / 文档口径前，用机器可复现的 PASS/FAIL 报告替代口头承诺"没问题了"。
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个配置驱动的**数据交付验证门禁**：报告说 PASS 才算 PASS，不靠人眼核对。
+配置驱动的验证门禁工具：核对数字口径、检查算法合成案例，并可选地验证有限状态模型，输出可复现的检查报告与疑点清单。
 
----
+适合数值建模、论文结果交付和小型工作流验证。项目保留三层流程：
 
-## 它解决什么问题
-
-数据审查最怕三种漏：
-
-1. **数字算错了** —— 算法跑出来的结果和论文里写的不一致
-2. **旧口径残留** —— 已经废弃的数值/口径还留在文档里没清干净
-3. **算法有系统偏差** —— 算法在"已知答案"上还原不出真实值，却只做了噪声鲁棒测试
-
-靠人眼/记忆核对容易漏（一次审查最多能漏掉贯穿 4 个文档的 400 倍误差）。本 skill 用机器检查替代人眼核对。
-
----
-
-## 工作流程
-
-```mermaid
-flowchart LR
-    A[交付前] --> B{配置对齐}
-    B -->|缺失| B1[建 gate_config.json]
-    B1 --> B
-    B -->|就绪| C[① 一致性门禁]
-    C -->|旧口径残留| F1[FAIL 必须修]
-    C -->|通过| D[② 合成自检]
-    D -->|误差超阈值| F2[FAIL 算法有偏差]
-    D -->|通过| E[③ 对抗性审查]
-    E --> P[PASS]
-```
-
-## 三步门禁
-
-| 步骤 | 脚本 | 作用 |
+| 层级 | 实现 | 检查内容 |
 |---|---|---|
-| ① 一致性门禁 | `check_consistency.py` | 从权威 JSON 提取全部数字当"真值"，扫描文档/图注，查旧口径残留(FAIL)、核心数字缺失(WARN)、孤儿数字候选 |
-| ② 合成自检 | `synthetic_check.py` | 用已知答案的合成数据跑被测算法，验证还原误差 < 阈值，证明算法无系统偏差 |
-| ③ 对抗性审查 | 手动整理 | 预判评审/队友最可能质疑的点，逐一写答辩 |
-
-### 判定逻辑
-
-| 门禁 | 结果 | 含义 |
-|---|---|---|
-| 一致性门禁 | B 类出现 → **FAIL** | 旧口径残留，必须修 |
-| 一致性门禁 | A 类核心缺失 → **WARN** | 需人工判断 |
-| 一致性门禁 | C 类孤儿 → **候选** | 需人工复核 |
-| 合成自检 | 还原误差 > 阈值 → **FAIL** | 算法有系统偏差 |
-| 对抗性审查 | 有质疑点无答辩 → **WARN** | 需补写 |
-
-**PASS 判据**：一致性门禁无 FAIL + 合成自检全过 + 对抗清单有答辩要点。
-
----
+| 数值一致性 | `scripts/check_consistency.py` | 权威数字出现情况、废弃数字/文本残留、孤儿数字候选 |
+| 算法与模型自检 | `scripts/synthetic_check.py` | 已知答案还原误差；可选有限模型的不变量、死锁与最短反例 |
+| 对抗性审查 | 人工或 AI 辅助整理 | 质疑核心结论，记录事实、答辩依据与待补事项 |
 
 ## 快速开始
 
-```bash
-pip install -r requirements.txt
+从仓库根目录运行以下命令。依赖为 NumPy 和 SciPy；当前已在 Windows / Python 3.13 环境验证。
 
-# 1. 按 references/gate_config.example.json 创建本项目 gate_config.json
-# 2. 跑一致性门禁
-python scripts/check_consistency.py --config gate_config.json
-# 3. 跑合成自检（可选：配置了算法段才跑）
-python scripts/synthetic_check.py --config gate_config.json
+```bash
+git clone https://github.com/yuye05/verification-gate-review.git
+cd verification-gate-review
+python -m pip install -r requirements.txt
 ```
 
----
+仓库提供可直接运行的付款—发货流程示例：
 
-## 配置说明
+```bash
+python -X utf8 scripts/check_consistency.py --config examples/microservice_order/gate_config.json
+python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config.json
+```
 
-`gate_config.json` 是唯一的配置入口。完整字段表：
+预期：两个脚本通过；正确模型声明 4 个状态组合，穷尽 3 个可达状态。
+报告生成到 `examples/microservice_order/reports/pass/`。
 
-| 字段 | 作用 |
+再运行故意缺少付款守卫的负对照：
+
+```bash
+python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config_buggy.json
+```
+
+预期：**FAIL，退出码 1**，关联需求 `REQ-ORDER-001`，反例为“初始状态 → 未付款直接发货”。
+这是预期的缺陷检测结果；报告生成到示例的 `reports/negative_control/`。
+第三层记录见[对抗性审查清单](examples/microservice_order/docs/对抗性审查清单.md)。
+
+## 在自己的项目中使用
+
+1. 参考[配置说明](references/configuration.md)和[配置模板](references/gate_config.example.json)，创建项目的 `gate_config.json`。
+2. 指定权威数字来源、扫描文件和需执行的算法/模型检查。模板中的光学路径及旧数字是示例，使用前须替换。
+3. 运行两个脚本，处理 FAIL 项，并复核 WARN 和孤儿候选。
+4. 针对核心结论填写 `对抗性审查清单.md`，注明检查范围后再交付。
+
+```bash
+python -X utf8 scripts/check_consistency.py --config /path/to/gate_config.json
+python -X utf8 scripts/synthetic_check.py --config /path/to/gate_config.json
+```
+
+配置中的相对路径以**配置文件所在目录**为基准。两个脚本均支持 `--outdir` 覆盖报告目录。
+第二层至少配置一项光学检查、`generic_check` 或 `model_check`；未配置的检查不会被当作已执行。
+
+## 判定与产物
+
+| 检查 | 判定规则 |
 |---|---|
-| `authoritative_json` | 权威数字来源 JSON（真值），脚本递归展平提取全部数字 |
-| `scan_dirs` | 要扫描的文档/代码/图注目录（相对配置目录） |
-| `scan_globs` | 扫描的文件扩展名（默认 md/txt/json/drawio） |
-| `forbidden_numbers` | 已废除的旧口径数字 `{value, label}`，出现即 FAIL |
-| `forbidden_texts` | 已废除的旧口径文本片段，出现即 FAIL |
-| `whitelist` | 合法但非结果的数字（物理常数/参数/DOI），孤儿检测跳过 |
-| `skip_dirs` | 不扫描的目录（备份/图/__pycache__） |
-| `skip_files` | 不扫描的文件（会话备份等） |
-| `core_docs` | 核心结果必须出现的关键文档名片段 |
-| `core_key_fragments` | 标记"核心"权威数字的 JSON key 片段 |
-| `skip_key_fragments` | 不提取为权威数字的 JSON key 片段（诊断数组等） |
-| `rel_tolerance` | 权威数字匹配容差（默认 0.002 = 0.2%） |
-| `output_dir` | 报告落盘目录 |
-| `pass_threshold_pct` | 合成自检还原误差阈值（默认 0.5%） |
-| `order_alignment` / `fft` / `kurtosis` | 合成自检算法段（内置光学示例，见下） |
-| `generic_check` | 通用算法自检段（可插拔，任意领域算法，见下） |
+| 一致性 | 旧数字或旧文本命中即 FAIL；核心数字缺失为 WARN；孤儿数字列为复核候选 |
+| 算法自检 | 误差须严格小于阈值；空案例、非有限结果、形状不符和算法异常不能通过 |
+| 模型检查 | 不变量违例或非终止死锁为 FAIL；达到状态上限为 INCONCLUSIVE，阻止通过 |
+| 对抗性审查 | 人工确认质疑点已有依据和答辩，明确记录未解决事项 |
 
-> 完整字段说明见 [references/gate_config.example.json](references/gate_config.example.json) 的 `_doc` 段。
-
-### 合成自检的内置示例
-
-`gate_config.example.json` 内置了一组光学厚度测量示例（级次对齐 / 修正轴 FFT / kurtosis 判据），展示"如何为自己的算法写合成数据自检"。被测算法不同时，按算法自身假设改写对应实现即可——**合成数据必须按被测算法的假设构造，不能喂与假设错位的理想输入**。
-
-### 通用算法自检 generic_check（任意领域）
-
-不想用内置示例时，在 `gate_config.json` 里填一个 `generic_check` 段即可把**任意领域算法**纳入自检：声明 `module`（算法 `.py` 路径）、`algo`（函数名）、`cases`（已知真值 + 合成输入）、`error_fn`（误差度量）、`pass_threshold_pct`（还原误差阈值，默认 0.5%）。脚本按你的算法自身假设构造合成输入，还原误差超阈值即 FAIL。配置格式见 [references/gate_config.example.json](references/gate_config.example.json) 的 `_doc` 段。
-
----
-
-## 输出
-
-| 文件 | 内容 |
+| 退出码 | 含义 |
 |---|---|
-| `门禁报告_一致性.md` | 数字口径差异清单（FAIL/WARN/候选） |
-| `门禁报告_合成自检.json` | 合成数据还原误差与 PASS/FAIL 判定 |
-| `对抗性审查清单.md` | 预判质疑 + 答辩要点 |
+| `0` | 该脚本通过；一致性结果仍可能包含 WARN/候选 |
+| `1` | 检查失败，或模型检查尚未穷尽 |
+| `2` | 配置或输入错误 |
 
----
+输出包括 `门禁报告_一致性.md`、`门禁报告_合成自检.json` 和人工整理的 `对抗性审查清单.md`。
+JSON 报告包含所运行检查、误差或模型反例，以及配置/模型 SHA-256。
+运行报告含时间戳与本机路径，作为本地证据使用，不随源码提交。
+
+整套门禁通过要求：一致性无 FAIL、第二层所配检查全部通过、WARN/候选已复核、对抗清单已有答辩依据。
+两个脚本独立运行，不自动汇总第三层；执行出错时不能用旧报告替代本次证据。
+
+## 能力边界
+
+- 数字检查按数值和容差匹配，不理解句子语义，不自动换算物理单位或百分比；孤儿候选仍采用启发式。
+- 合成测试只覆盖所选输入，不能据此证明算法在全部输入上正确。
+- 模型检查穷尽的是声明的有限模型，不验证实际服务代码、分布式消息行为、活性或公平性。
+- `generic_check` 会导入执行本地 Python 模块，只使用来源可信、已经审查的代码。
+- 本工具不替代论文结构审查、代码审查或真实系统测试。
+
+## 验证与开发
+
+```bash
+python -X utf8 evals/check_regressions.py
+python -X utf8 scripts/synthetic_check.py --config references/gate_config.example.json --outdir ../evals/optical_smoke
+```
+
+当前回归入口包含 45 项检查，覆盖正常结果、缺陷负例、配置错误、数值边界和模型状态上限。
+光学示例包含 9 个还原案例和 kurtosis 判据。实际判定以本次命令输出为准。
+贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，待发布变更见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 作为 Skill 使用
+
+本仓库提供 [SKILL.md](SKILL.md)。放入使用环境支持的 Skill 目录后，明确要求“跑门禁”或“用 verification-gate”调用。
+Claude Code 可使用 `~/.claude/skills/verification-gate-review/`；其他环境按其 Skill 安装约定处理。
+该 Skill **仅手动触发**，不因普通“检查/审查”措辞自动执行。
 
 ## 仓库结构
 
-```
+```text
 verification-gate-review/
-├── README.md                          # 本文档
-├── SKILL.md                           # Claude Code skill 定义
-├── AUTHORSHIP.md                      # AI 辅助工作的作者记录
-├── requirements.txt                   # 依赖：numpy / scipy
-├── LICENSE                            # MIT
-├── .gitignore
-├── scripts/
-│   ├── check_consistency.py           # 门禁①：一致性校验
-│   └── synthetic_check.py             # 门禁②：合成数据自检
-├── references/
-│   └── gate_config.example.json       # 配置模板 + 字段说明
-└── evals/
-    └── evals.json                     # 评估用例
+├── README.md / SKILL.md
+├── LICENSE / AUTHORSHIP.md
+├── CONTRIBUTING.md / CHANGELOG.md
+├── requirements.txt
+├── scripts/                  # 一致性、合成自检、有限模型检查
+├── references/               # 配置说明、模板、设计与后续方向
+├── examples/microservice_order/
+│   ├── *.json                # 配置、正确模型、缺陷模型与预期值
+│   └── docs/                 # 结果说明与对抗清单
+└── evals/                    # 回归入口与 Skill 使用评估案例
 ```
 
----
+实现选择和后续方向见[设计说明](references/design-notes.md)。
 
-## 使用场景
+## 许可证与作者
 
-**适用**：
-- 建模比赛 / 论文交付前，数字口径一致性把关
-- 算法改写后，用已知答案验证无系统偏差
-- 跨文档核对数值（草稿 ↔ 代码输出 ↔ 结果 JSON）
-
-**不适用**：
-- 论文结构/逻辑完整性审查（那是文章审计类 skill 的职责）
-- 纯代码语法检查
-
----
-
-## 使用方式（作为 Claude Code skill）
-
-本仓库同时是一个 Claude Code skill。放入 `~/.claude/skills/verification-gate-review/` 后，在交付前说"跑门禁"即可触发。
-
-**⚠️ 手动触发**：仅在用户明确要求时使用，不因对话中出现"检查/验证/审查"等词自动触发。
-
----
-
-## FAQ
-
-**Q: 一致性门禁报了一堆"孤儿数字候选"，都是误报？**
-A: 可能是百分比（95%）、坐标（66.0）、分位（97.5）等合法数字。把它们加进 `whitelist` 即可。
-
-**Q: 合成自检总是 FAIL，是不是算法有问题？**
-A: 先确认合成数据是否按算法自身假设构造。如果生成器与算法相位约定错位，失败是生成器的问题不是算法的问题。
-
-**Q: 一致性门禁和合成自检的区别？**
-A: 一致性门禁查"数字写没写对"（口径一致、无旧残留）；合成自检查"算法本身有没有系统偏差"（已知答案还原）。两者互补。
-
----
-
-## 许可证
-
-[MIT](LICENSE) · AI 辅助工作的作者记录见 [AUTHORSHIP.md](AUTHORSHIP.md)。
+项目采用 [MIT License](LICENSE)。作者为 [Jimmy王（yuye05）](https://github.com/yuye05)，贡献与辅助工具使用记录见 [AUTHORSHIP.md](AUTHORSHIP.md)。

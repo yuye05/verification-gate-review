@@ -1,7 +1,7 @@
-"""验证门禁②：合成数据自检 — 证明算法无系统偏差（配置驱动通用版）
+"""验证门禁②：已知答案测试与可选的有限状态模型检查（配置驱动）。
 
 用"已知答案"的合成数据跑算法，验证还原误差 < pass_threshold_pct ——
-证明算法无系统偏差（不只测噪声鲁棒）。从 gate_config.json 读取要验证的
+检查所选案例的还原误差（不只测噪声鲁棒）。从 gate_config.json 读取要验证的
 算法类型和参数（字段说明见 references/gate_config.example.json）：
 
   一、光学内置三套（向后兼容，见文件头物理陷阱说明）
@@ -12,14 +12,15 @@
   二、通用算法自检 generic_check（2026-09 新增，支持任意领域算法）
   - 配置驱动、可插拔：声明"合成数据生成器 + 被测算法 + 误差判定"，不绑定
     光学假设。用"已知真值 → 按算法自身假设构造输入 → 调算法 → 还原误差 →
-    对 pass_threshold_pct"的通用流程证明算法无系统偏差。
+    对 pass_threshold_pct"的通用流程；有限案例不构成全输入域正确性证明。
 
 generic_check 配置格式：
 {
   "generic_check": {
-    "module": "<被测算法所在 .py 模块路径，或内置别名>",   // 必填
+    "module": "<被测算法所在 .py 模块路径>",   // 必填
     "algo": "<module 内的函数名，接受合成输入返回估计值>",  // 必填
     "encoder": "<如何构造合成输入>",        // "arg_list" | "kw_args" | "callback"
+    "generator": "<callback 模式的生成器函数名，接受 truth 及 inputs/extra 参数>",
     "cases": [                             // 已知真值列表
       {"truth": <真值>, "inputs": {...}, "extra": {...}},
       ...
@@ -27,24 +28,28 @@ generic_check 配置格式：
     "truth_key": "truth",                  // 真值在 case 里的键（默认 truth）
     "error_fn": "rel_abs" | "rel" | "abs", // 误差度量（默认 rel_abs 相对百分比）
     "pass_threshold_pct": 0.5,
+    "abs_tolerance": 0.005,                 // error_fn=abs 时必填，单位同真值
     "note": "说明"
   }
 }
 
 字段说明：
-- module：被测算法的 .py 文件路径（相对配置文件目录）或用内置别名
-  （"builtin_linear" 等）。脚本把它 import 成模块，再取 algo 函数。
+- module：被测算法的 .py 文件路径（相对配置文件目录）。执行本地模块代码，
+  应当只使用已审查的可信模块。
 - encoder：构造输入的方式。"arg_list"=按 case["inputs"] 的 list 顺序做位置参数；
-  "kw_args"=按 dict 做关键字参数；"callback"=case["inputs"] 是合成函数名，用它真值。
+  "kw_args"=按 dict 做关键字参数；"callback"=调用 generator(truth, **inputs, **extra)，
+  生成器返回 list（位置参数）或 dict（关键字参数），再传给 algo。
 - algo 返回估计值（标量/数组），与真值对比算误差；误差 < pass_threshold_pct 判 PASS。
-- truth 可为标量或数组（数组则逐元素算误差取最大）。
+- truth 可为标量或数组（数组则逐元素算误差取最大）。rel/rel_abs 均以百分数报告；
+  abs 使用 abs_tolerance。model_check 可另配 model 路径和 max_states。
 
 输出：门禁报告_合成自检.json（落盘到 output_dir，默认=配置文件目录）
 运行：python synthetic_check.py --config <path/to/gate_config.json>
 """
 
 import importlib.util
-import inspect
+import math
+import hashlib
 import sys
 import json
 import argparse
@@ -55,9 +60,11 @@ import numpy as np
 from scipy.signal import savgol_filter
 from scipy.optimize import minimize_scalar
 
+from model_check import check_model
+
 
 # ═══════════════════════════════════════════════════════════════
-# 参考实现（与 B 项目 fresnel.py / q2 / q3 一致，证明算法无系统偏差）
+# 光学参考实现：用于所选合成案例的还原测试。
 # ═══════════════════════════════════════════════════════════════
 def snell_cos(theta1_deg, n2):
     """Snell 定律 cos(θ₂)。"""
@@ -256,6 +263,8 @@ def gen_airy_spectrum(sigma, d_true, theta, n, r2=0.3, noise=0.001):
 def test_order_alignment(cfg):
     """【A】级次对齐还原：直接构造整数级次谷（±jitter 扰动模拟噪声）。"""
     out = []
+    if not cfg.get("d_true_list"):
+        raise ValueError("order_alignment.d_true_list 不得为空")
     n = cfg.get("n", 2.55)
     d_range = tuple(cfg.get("d_range", [5.0, 18.0]))
     thetas = cfg.get("ncos_theta_list", cfg.get("thetas", [10, 15]))
@@ -287,6 +296,8 @@ def test_order_alignment(cfg):
 def test_fft(cfg):
     """【B】修正轴 FFT 还原：强多光束 Airy 光谱 → 应还原 d_true。"""
     out = []
+    if not cfg.get("d_true_list"):
+        raise ValueError("fft.d_true_list 不得为空")
     n = cfg.get("n", 3.42)
     d_range = tuple(cfg.get("d_range", [3.0, 5.0]))
     thetas = cfg.get("thetas", cfg.get("thetas_deg", [10, 15]))
@@ -342,12 +353,11 @@ def test_kurtosis(cfg):
 # 通用算法自检（2026-09 新增；不绑定光学假设，支持任意领域算法）
 # ═══════════════════════════════════════════════════════════════
 def _load_module(module_path, cfg_dir):
-    """导入被测算法模块。module_path 可为绝对/相对路径，或内置别名。"""
+    """导入可信的本地算法模块。module_path 可为绝对/相对文件路径。"""
     p = Path(module_path)
     if not p.is_absolute():
         p = cfg_dir / p
     if not p.exists():
-        # 内置别名（光学题参考实现已在文件中，无需导入；此处预留扩展）
         raise FileNotFoundError(f"[generic_check] 找不到模块 {module_path}（已尝试 {p}）")
     name = "gencheck_target_" + p.stem
     spec = importlib.util.spec_from_file_location(name, p)
@@ -357,18 +367,23 @@ def _load_module(module_path, cfg_dir):
 
 
 def _estimate_error(est, truth, fn="rel_abs"):
-    """按 error_fn 计算误差（百分比）。truth/est 可为标量或数组。"""
+    """rel/rel_abs 返回百分数，abs 返回绝对误差；非法数据不能通过。"""
     e = np.asarray(est, dtype=float)
     t = np.asarray(truth, dtype=float)
     if e.shape != t.shape:
-        return None, "shape 不匹配: est={e.shape} truth={t.shape}"
-    denom = np.maximum(np.abs(t), 1e-12)
-    if fn == "rel":
-        err = np.abs(e - t) / denom
-    elif fn == "abs":
+        return None, f"shape 不匹配: est={e.shape} truth={t.shape}"
+    if not t.size or not np.all(np.isfinite(e)) or not np.all(np.isfinite(t)):
+        return None, "真值和估计值必须是非空有限数值"
+    if fn == "abs":
         err = np.abs(e - t)
-    else:  # rel_abs：相对误差 + 绝对兜底（小真值时防爆炸）
-        err = 100.0 * np.abs(e - t) / denom
+    elif fn in ("rel", "rel_abs"):
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            err = np.where(t == 0, np.where(e == 0, 0.0, np.inf),
+                           100.0 * np.abs(e - t) / np.abs(t))
+    else:
+        raise ValueError(f"未知 error_fn: {fn}")
+    if not np.all(np.isfinite(err)):
+        return None, "相对误差无定义或溢出；含零真值的用例可选 abs + abs_tolerance"
     return float(np.max(err)), None
 
 
@@ -381,41 +396,58 @@ def test_generic(cfg, cfg_dir):
     algo_name = cfg.get("algo")
     encoder = cfg.get("encoder", "arg_list")
     error_fn = cfg.get("error_fn", "rel_abs")
-    threshold = float(cfg.get("pass_threshold_pct", 0.5))
+    if error_fn not in ("rel", "rel_abs", "abs"):
+        raise ValueError(f"未知 error_fn: {error_fn}")
+    if error_fn == "abs" and "abs_tolerance" not in cfg:
+        raise ValueError("error_fn=abs 时必须配置 abs_tolerance（单位同真值）")
+    threshold = float(cfg["abs_tolerance"] if error_fn == "abs" else cfg.get("pass_threshold_pct", 0.5))
+    if not math.isfinite(threshold) or threshold <= 0:
+        raise ValueError("误差阈值必须是正有限数")
+    if encoder not in ("arg_list", "kw_args", "callback"):
+        raise ValueError(f"未知 encoder: {encoder}")
     cases = cfg.get("cases", [])
     if not module_path or not algo_name or not cases:
         raise ValueError("[generic_check] 必须配置 module / algo / cases")
 
     mod = _load_module(module_path, cfg_dir)
     algo = getattr(mod, algo_name, None)
-    if algo is None:
+    if not callable(algo):
         raise ValueError(f"[generic_check] 模块 {module_path} 无函数 {algo_name}")
+    generator = getattr(mod, cfg.get("generator", ""), None)
+    if encoder == "callback" and not callable(generator):
+        raise ValueError("callback 模式必须指定可调用的 generator 函数")
 
     out = []
     for i, case in enumerate(cases):
+        if not isinstance(case, dict) or cfg.get("truth_key", "truth") not in case:
+            raise ValueError(f"case {i}: 必须声明真值")
         inputs = case.get("inputs", {})
         extra = case.get("extra", {})
         truth = case.get(cfg.get("truth_key", "truth"))
-        # encoder 决定如何把 inputs 传给 algo
-        if encoder == "arg_list":
-            est = algo(*inputs) if isinstance(inputs, list) else algo(inputs)
-        elif encoder == "kw_args":
-            est = algo(**inputs)
-        elif encoder == "callback":
-            # inputs 声明了合成函数名/参数，先构造再传给 algo
-            est = algo(**inputs, **extra)
-        else:
-            raise ValueError(f"[generic_check] 未知 encoder: {encoder}")
-
-        err, err_msg = _estimate_error(est, truth, error_fn)
+        est = None
+        try:
+            if encoder == "callback":
+                inputs = generator(truth, **inputs, **extra)
+                if not isinstance(inputs, (list, dict)):
+                    raise ValueError("generator 必须返回 list 或 dict")
+                est = algo(**inputs) if isinstance(inputs, dict) else algo(*inputs)
+            elif encoder == "kw_args":
+                est = algo(**inputs)
+            else:
+                est = algo(*inputs) if isinstance(inputs, list) else algo(inputs)
+            err, err_msg = _estimate_error(est, truth, error_fn)
+        except Exception as exc:
+            err, err_msg = None, f"{type(exc).__name__}: {exc}"
         ok = (err is not None) and (err < threshold)
         if err is None:
             ok = False
         out.append({
             "case": i, "truth": truth if not isinstance(truth, np.ndarray) else truth.tolist(),
-            "estimate": est if not isinstance(est, np.ndarray) else est.tolist(),
-            "err_pct": None if err is None else round(float(err), 4),
-            "threshold_pct": threshold, "ok": bool(ok),
+            "estimate": np.asarray(est, dtype=float).tolist() if err is not None else None,
+            "error": err, "error_unit": "absolute" if error_fn == "abs" else "percent",
+            "threshold": threshold,
+            "err_pct": err if error_fn != "abs" else None,
+            "threshold_pct": threshold if error_fn != "abs" else None, "ok": bool(ok),
             "note": err_msg if err_msg else (cfg.get("note", "")),
         })
     return out
@@ -425,7 +457,7 @@ def test_generic(cfg, cfg_dir):
 # Main
 # ═══════════════════════════════════════════════════════════════
 def main():
-    ap = argparse.ArgumentParser(description="验证门禁②：合成数据自检（算法无系统偏差证明）")
+    ap = argparse.ArgumentParser(description="验证门禁②：合成数据自检与有限状态模型检查")
     ap.add_argument("--config", default="gate_config.json",
                     help="gate_config.json 路径（默认当前目录 gate_config.json）")
     ap.add_argument("--outdir", default=None, help="报告落盘目录（覆盖配置里的 output_dir）")
@@ -433,8 +465,7 @@ def main():
 
     cfg_path = Path(args.config)
     if not cfg_path.exists():
-        print(f"[配置缺失] 找不到配置文件: {cfg_path}")
-        sys.exit(2)
+        raise FileNotFoundError(f"找不到配置文件: {cfg_path}")
     cfg_dir = cfg_path.resolve().parent
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     out_dir = Path(args.outdir) if args.outdir else Path(cfg.get("output_dir", cfg_dir))
@@ -442,17 +473,17 @@ def main():
         out_dir = cfg_dir / out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     threshold = float(cfg.get("pass_threshold_pct", 0.5))
+    if not math.isfinite(threshold) or threshold <= 0:
+        raise ValueError("pass_threshold_pct 必须是正有限数")
 
     print("=" * 68)
-    print("验证门禁②：合成数据自检（算法无系统偏差证明）")
+    print("验证门禁②：合成数据自检与有限状态模型检查")
     print(f"配置: {cfg_path.resolve()}")
     print("=" * 68)
-    print("口径说明：级次对齐按 j'=整数级次谷直接构造（与算法相位约定一致）；\n"
-          "         FFT 用强多光束 Airy 光谱（免疫条纹形状失真）；kurtosis 判据验证单调区分。")
+    if any(cfg.get(key) for key in ("order_alignment", "fft", "kurtosis")):
+        print("口径说明：级次对齐按整数级次谷构造；FFT 用 Airy 光谱；kurtosis 区分所选信号。")
 
     results = {}
-    verdict_ok = True
-    detail_lines = []
 
     # 【A】级次对齐
     oa_cfg = cfg.get("order_alignment")
@@ -471,9 +502,6 @@ def main():
                 jit = f"扰动±{r['jitter_cm1']}" if r["jitter_cm1"] else "无扰动"
                 print(f"  {mark} d_true={r['d_true']} µm [{jit}] → joint={r['d_joint']} "
                       f"(误差 {r['rel_err_pct']:.3f}%)")
-            verdict_ok = verdict_ok and r["ok"]
-    else:
-        detail_lines.append("未配置 order_alignment，跳过")
 
     # 【B】FFT
     fft_cfg = cfg.get("fft")
@@ -491,9 +519,6 @@ def main():
                       f"(误差 {r['rel_err_pct']:.3f}%, 10°={r['d10']:.4f} 15°={r['d15']:.4f})")
             else:
                 print(f"  ✗ d_true={r['d_true']} µm → FFT 无主峰")
-            verdict_ok = verdict_ok and r["ok"]
-    else:
-        detail_lines.append("未配置 fft，跳过")
 
     # 【C】kurtosis 判据
     kur_cfg = cfg.get("kurtosis")
@@ -504,31 +529,36 @@ def main():
         print(f"  纯正弦 kurtosis={kc['k_two_beam']} (理论 1.5)，"
               f"强多光束 kurtosis={kc['k_strong_multibeam']} → "
               f"{'✓ 判据单调区分' if kc['criterion_ok'] else '✗ 判据异常'}")
-        verdict_ok = verdict_ok and kc["criterion_ok"]
-    else:
-        detail_lines.append("未配置 kurtosis，跳过")
 
     # 【G】通用算法自检（任意领域，可插拔）
     gen_cfg = cfg.get("generic_check")
     if gen_cfg:
         print(f"\n【G】通用算法自检（module={gen_cfg.get('module')}, algo={gen_cfg.get('algo')}）")
+        gen_cfg = {"pass_threshold_pct": threshold, **gen_cfg}
         glist = test_generic(gen_cfg, cfg_dir)
         results["generic_check"] = glist
         for r in glist:
             mark = "✓" if r["ok"] else "✗"
-            if r["err_pct"] is None:
+            if r["error"] is None:
                 print(f"  {mark} case={r['case']} 真值={r['truth']} → {r['note']}")
             else:
                 print(f"  {mark} case={r['case']} 真值={r['truth']} → 估计={r['estimate']} "
-                      f"(误差 {r['err_pct']}%)")
-            verdict_ok = verdict_ok and r["ok"]
-    else:
-        detail_lines.append("未配置 generic_check，跳过")
+                      f"(误差 {r['error']} {r['error_unit']}，阈值 {r['threshold']})")
 
-    # 校验至少配置了一个门禁（光学三套 或 通用）
-    if not (cfg.get("order_alignment") or cfg.get("fft") or cfg.get("kurtosis") or cfg.get("generic_check")):
-        print("[配置错误] order_alignment / fft / kurtosis / generic_check 至少配置一个。")
-        sys.exit(2)
+    # 可选模型检查仍属于第二层门禁，不增加新的交付阶段。
+    model_cfg = cfg.get("model_check")
+    if model_cfg:
+        model_path = cfg_dir / model_cfg["model"]
+        model_bytes = model_path.read_bytes()
+        model_result = check_model(json.loads(model_bytes), model_cfg.get("max_states", 10000))
+        model_result["model_sha256"] = hashlib.sha256(model_bytes).hexdigest()
+        results["model_check"] = model_result
+        print(f"\n【M】有限状态模型: {model_result['verdict']}，"
+              f"已检查 {model_result['explored_states']} 个状态")
+        if "counterexample" in model_result:
+            print(f"  反例: {json.dumps(model_result['counterexample'], ensure_ascii=False)}")
+    if not results:
+        raise ValueError("至少配置一项算法自检或 model_check")
 
     # 汇总
     a_ok = all(r["ok"] for r in results.get("order_alignment", [])) if "order_alignment" in results else True
@@ -537,17 +567,19 @@ def main():
     g_ok = all(r["ok"] for r in results.get("generic_check", [])) if "generic_check" in results else True
     n_pass = sum(1 for sec in ("order_alignment", "fft", "generic_check") for r in results.get(sec, []) if r["ok"])
     n_total = sum(len(results.get(sec, [])) for sec in ("order_alignment", "fft", "generic_check"))
-    all_ok = a_ok and b_ok and c_ok and g_ok
+    m_ok = results.get("model_check", {}).get("ok", True)
+    all_ok = a_ok and b_ok and c_ok and g_ok and m_ok
     print("\n" + "=" * 68)
-    print(f"判定: {'PASS — 算法无系统偏差' if all_ok else 'FAIL — 存在还原偏差'}")
-    print(f"  级次对齐: {'通过' if a_ok else '存在失败'}   FFT: {'通过' if b_ok else '存在失败'}")
-    print(f"  kurtosis 判据: {'通过' if c_ok else '未通过'}   通用自检: {'通过' if g_ok else '存在失败'}")
-    print(f"  还原测试通过 {n_pass}/{n_total}（阈值 {threshold}%）")
+    print(f"判定: {'PASS — 所配检查通过' if all_ok else 'FAIL — 检查失败或模型检查未完成'}")
+    print(f"  已运行检查: {', '.join(results)}")
+    if n_total:
+        print(f"  还原测试通过 {n_pass}/{n_total}（通用用例的具体阈值/单位见逐例结果）")
     print("=" * 68)
 
     out = {
         "timestamp": datetime.now().isoformat(),
         "config_path": str(cfg_path.resolve()),
+        "config_sha256": hashlib.sha256(cfg_path.read_bytes()).hexdigest(),
         "pass_threshold_pct": threshold,
         "verdict": "PASS" if all_ok else "FAIL",
         "sections_checked": {
@@ -555,15 +587,25 @@ def main():
             "fft": "fft" in results,
             "kurtosis": "kurtosis_criterion" in results,
             "generic_check": "generic_check" in results,
+            "model_check": "model_check" in results,
         },
-        "summary": {"a_alignment_ok": a_ok, "b_fft_ok": b_ok, "c_kurtosis_ok": c_ok,
-                    "g_generic_ok": g_ok, "passed": n_pass, "total": n_total},
+        "summary": {"a_alignment_ok": a_ok if "order_alignment" in results else None,
+                    "b_fft_ok": b_ok if "fft" in results else None,
+                    "c_kurtosis_ok": c_ok if "kurtosis_criterion" in results else None,
+                    "g_generic_ok": g_ok if "generic_check" in results else None,
+                    "m_model_ok": m_ok if "model_check" in results else None,
+                    "passed": n_pass, "total": n_total},
         **results,
     }
     out_path = out_dir / "门禁报告_合成自检.json"
-    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
     print(f"报告已落盘: {out_path}")
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        print(f"[配置/输入错误] {exc}")
+        sys.exit(2)

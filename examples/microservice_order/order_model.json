@@ -1,0 +1,14 @@
+{
+  "name": "payment-shipping-safety",
+  "variables": {"paid": [false, true], "shipped": [false, true]},
+  "initial": {"paid": false, "shipped": false},
+  "transitions": [
+    {"id": "pay", "guard": {"paid": false, "shipped": false}, "set": {"paid": true}},
+    {"id": "ship", "guard": {"paid": true, "shipped": false}, "set": {"shipped": true}}
+  ],
+  "invariants": [
+    {"id": "shipping_requires_payment", "requirement": "REQ-ORDER-001",
+     "when": {"shipped": true}, "assert": {"paid": true}}
+  ],
+  "terminals": [{"paid": true, "shipped": true}]
+}

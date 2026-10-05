@@ -29,6 +29,7 @@
 import sys
 import json
 import re
+import math
 import argparse
 from pathlib import Path
 from datetime import datetime
@@ -94,20 +95,18 @@ def num_close(a, b, rel=DEFAULT_REL_TOL, abs_tol=DEFAULT_REL_TOL):
     return abs(a - b) <= abs_tol + rel * max(abs(a), abs(b))
 
 
-TOKEN_RE = re.compile(r"\d+\.\d+|\d+")
+TOKEN_RE = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
 TAG_RE = re.compile(r"\\tag\{[^}]*\}")          # LaTeX 方程编号 \tag{3.15}
-EQNUM_RE = re.compile(r"\((\d+\.\d+)\)")         # 行内 (3.15) 方程编号
 
 
 def extract_tokens(text):
-    """提取数值 token；剔除 LaTeX 方程编号（\tag{3.15}、行内 (3.15)）。"""
+    """提取含符号/科学计数法的数字；只剔除明确的 LaTeX 方程编号。"""
     text = TAG_RE.sub(" ", text)
-    text = EQNUM_RE.sub(" ", text)
     return [float(t) for t in TOKEN_RE.findall(text)]
 
 
 # ── 文件扫描 ───────────────────────────────────────────────────
-def scan_text_files(cfg, cfg_dir):
+def scan_text_files(cfg, cfg_dir, config_path=None):
     """收集待扫描文本文件（排除权威来源、配置/报告自身、skip 目录与文件）。"""
     scan_dirs = [resolve(cfg_dir, d) for d in cfg.get("scan_dirs", ["."])]
     globs = norm_globs(cfg.get("scan_globs"))
@@ -117,12 +116,13 @@ def scan_text_files(cfg, cfg_dir):
     }
     # 权威来源 JSON 自动排除（它们是源头，不是交付文档；否则 A 类会误报"已出现"）
     auth_srcs = {resolve(cfg_dir, jp).resolve() for jp in cfg.get("authoritative_json", [])}
+    if config_path is not None:
+        auth_srcs.add(config_path.resolve())
 
-    files = []
+    files = set()
     for d in scan_dirs:
-        if not d.exists():
-            print(f"  [跳过] 扫描目录不存在: {d}")
-            continue
+        if not d.is_dir():
+            raise ValueError(f"扫描目录不存在或不是目录: {d}")
         for f in sorted(d.rglob("*")):
             if f.is_dir() or f.suffix.lower() not in globs:
                 continue
@@ -134,8 +134,8 @@ def scan_text_files(cfg, cfg_dir):
                 continue
             if GATE_DIR in f.parents:       # 本 skill 的脚本目录，不扫
                 continue
-            files.append(f)
-    return files
+            files.add(f.resolve())
+    return sorted(files)
 
 
 # ── 主校验 ─────────────────────────────────────────────────────
@@ -151,13 +151,17 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rel_tol = float(cfg.get("rel_tolerance", DEFAULT_REL_TOL))
+    if not math.isfinite(rel_tol) or rel_tol < 0:
+        raise ValueError("rel_tolerance 必须是非负有限数")
 
     print("=" * 68)
     print("验证门禁①：数值口径自动一致性校验（配置驱动通用版）")
     print(f"配置: {Path(args.config).resolve()}")
     print("=" * 68)
 
-    files = scan_text_files(cfg, cfg_dir)
+    files = scan_text_files(cfg, cfg_dir, Path(args.config))
+    if not files:
+        raise ValueError("没有可扫描的目标文件，不能判定 PASS")
     print(f"\n[扫描] {len(files)} 个文本文件\n")
 
     # 读取全部文本 + token（同时保留原始 token 字符串，孤儿检测用格式判断）
@@ -169,9 +173,10 @@ def main():
             txt = f.read_text(encoding="utf-8", errors="replace")
         file_texts[f] = txt
         cleaned = TAG_RE.sub(" ", txt)
-        cleaned = EQNUM_RE.sub(" ", cleaned)
         file_tokens[f] = [float(t) for t in TOKEN_RE.findall(cleaned)]
         file_rawtokens[f] = TOKEN_RE.findall(cleaned)
+        if not all(math.isfinite(t) for t in file_tokens[f]):
+            raise ValueError(f"目标文件包含溢出的数值: {f}")
 
     # ── 权威数字（从 JSON 自动提取）──
     skip_key_frags = cfg.get("skip_key_fragments", [])
@@ -187,6 +192,8 @@ def main():
         for value, kp in flatten_json(data):
             if any(frag in kp for frag in skip_key_frags):
                 continue
+            if not math.isfinite(value):
+                raise ValueError(f"权威数字非有限值: {p}: {kp}")
             authoritative.append((value, kp))
     if not authoritative:
         print("  [配置错误] 权威数字为空。请检查 authoritative_json 是否指向含数值的 JSON。")
@@ -197,8 +204,10 @@ def main():
 
     # ── B. 禁用旧口径（HARD FAIL）──
     print("【B】禁用旧口径残留检测")
-    forbidden_nums = [(fb["value"], fb.get("label", str(fb["value"])))
+    forbidden_nums = [(float(fb["value"]), fb.get("label", str(fb["value"])))
                       for fb in cfg.get("forbidden_numbers", [])]
+    if not all(math.isfinite(n) for n, _ in forbidden_nums):
+        raise ValueError("forbidden_numbers 必须是有限数值")
     forbidden_texts = cfg.get("forbidden_texts", [])
     for f in files:
         txt = file_texts[f]
@@ -235,8 +244,7 @@ def main():
                 core_missing.append((value, kp))
         mark = "✓" if found_in else ("⚠核心缺失" if is_core else "○未出现")
         print(f"  [{mark}] {value:<10} {kp}")
-        if found_in:
-            report.append((value, kp, found_in))
+        report.append((value, kp, found_in))
 
     if core_missing:
         print("\n  [WARN] 核心数字未出现在核心文档中：")
@@ -249,7 +257,10 @@ def main():
     # ── C. 孤儿数字候选 ──
     print("\n【C】孤儿数字候选（结果样式数字，不在权威集/白名单）")
     auth_vals = [v for v, _ in authoritative]
-    white_vals = set(auth_vals) | set(cfg.get("whitelist", []))
+    whitelist = [float(w) for w in cfg.get("whitelist", [])]
+    if not all(math.isfinite(w) for w in whitelist):
+        raise ValueError("whitelist 必须是有限数值")
+    white_vals = set(auth_vals) | set(whitelist)
     seen = set()
     for f in files:
         rel_path = str(f.relative_to(cfg_dir)) if cfg_dir in f.parents else str(f)
@@ -308,7 +319,12 @@ def main():
     out_path = out_dir / REPORT_NAME
     out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n报告已落盘: {out_path}")
+    return 1 if fails else 0
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        print(f"[配置/输入错误] {exc}")
+        sys.exit(2)

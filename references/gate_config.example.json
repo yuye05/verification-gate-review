@@ -16,8 +16,11 @@
     "order_alignment": "合成自检【A】级次对齐还原参数。n=折射率；band=谷所在波段(cm⁻¹)；d_range=搜索域；jitter_cm1=谷位置扰动(模拟噪声)；d_true_list=要还原的厚度真值；ncos_theta_list=入射角(度)。",
     "fft": "合成自检【B】修正轴 FFT 还原参数。band/n/d_range/r2(界面反射率，越大条纹越尖)/d_true_list。",
     "kurtosis": "合成自检【C】kurtosis 判据自洽参数。纯正弦(n,d_true) vs 强多光束(Airy r2)。two_beam_max=两光束判为多光束的上限；strong_min=强多光束的下限。",
-    "pass_threshold_pct": "合成自检还原误差阈值（%），默认 0.5。误差超过即 FAIL。",
-    "sigma_step_cm1": "合成光谱的波数网格步长(cm⁻¹)，默认 0.5。"
+    "pass_threshold_pct": "合成自检还原误差阈值（%），默认 0.5。误差达到或超过阈值即 FAIL。",
+    "sigma_step_cm1": "合成光谱的波数网格步长(cm⁻¹)，默认 0.5。",
+    "generic_check": "通用自检：module 为可信本地 .py 路径，algo 为函数名，cases 为非空已知真值列表。encoder=arg_list/kw_args/callback；callback 需 generator 函数，调用 generator(truth, **inputs, **extra) 后将返回的 list/dict 传给算法。",
+    "generic_check_error": "error_fn=rel/rel_abs 时误差均以百分数报告，与 pass_threshold_pct 比较；局部阈值优先，否则继承全局。error_fn=abs 时必须单独填 abs_tolerance，单位同真值。零真值与非零估计不能用相对误差判 PASS。",
+    "model_check": "可选的第二层模型检查：{model: 有限状态模型 JSON 的相对/绝对路径, max_states: 正整数(默认10000)}。BFS 穷举可达状态，检查条件不变量和非终止死锁，输出需求编号与最短反例。状态上限返回 INCONCLUSIVE 并阻止通过。示例见 examples/microservice_order。"
   },
   "authoritative_json": [
     "results/q2_results.json",
