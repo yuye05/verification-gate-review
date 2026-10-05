@@ -15,6 +15,7 @@
 ## 工作流程
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 18, "padding": 8, "curve": "linear"}, "themeVariables": {"fontSize": "14px"}}}%%
 flowchart TB
     CFG["配置对齐<br/>gate_config.json · 数据来源 · 扫描范围 · 阈值"]
     SCAN["① 数值一致性 · check_consistency.py<br/>提取权威数字并扫描文件<br/>旧数字 / 旧文本 · 核心数字 · 孤儿候选"]
@@ -26,8 +27,8 @@ flowchart TB
     SOK{"所配检查<br/>全部通过？"}
     HUMAN["③ 人工对抗性审查<br/>复核 WARN 与孤儿候选<br/>整理质疑 · 事实 · 答辩依据"]
     ROK{"人工疑点<br/>已闭环？"}
-    FIX["补充依据或修正结论"]
     DELIVER["交付通过<br/>一致性报告 + 自检报告 + 审查清单"]
+    FIX["补充依据或修正结论"]
     BLOCK["阻止交付 · 退出码 1<br/>修正问题后重跑"]
     ERROR["退出码 2<br/>修正配置与输入后重跑"]
 
@@ -43,11 +44,12 @@ flowchart TB
     GENERIC --> SOK
     MODEL --> SOK
     SOK -->|是 · 所配检查 PASS| HUMAN
-    SOK -->|否 · FAIL 或模型 INCONCLUSIVE| BLOCK
+    SOK -->|否 · FAIL 或模型<br/>INCONCLUSIVE| BLOCK
     HUMAN --> ROK
+    ROK -->|是| DELIVER
     ROK -->|否| FIX
     FIX -. 重新复核 .-> HUMAN
-    ROK -->|是| DELIVER
+    ERROR ~~~ BLOCK
 
     classDef input fill:#f1f5f9,stroke:#64748b,color:#0f172a;
     classDef process fill:#eff6ff,stroke:#3b82f6,color:#0f172a;
