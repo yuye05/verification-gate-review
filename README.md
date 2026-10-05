@@ -12,6 +12,60 @@
 | 算法与模型自检 | `scripts/synthetic_check.py` | 已知答案还原误差；可选有限模型的不变量、死锁与最短反例 |
 | 对抗性审查 | 人工或 AI 辅助整理 | 质疑核心结论，记录事实、答辩依据与待补事项 |
 
+## 工作流程
+
+```mermaid
+flowchart TB
+    CFG["配置对齐<br/>gate_config.json · 数据来源 · 扫描范围 · 阈值"]
+    SCAN["① 数值一致性 · check_consistency.py<br/>提取权威数字并扫描文件<br/>旧数字 / 旧文本 · 核心数字 · 孤儿候选"]
+    COK{"旧口径<br/>已清除？"}
+    SELECT["② 算法与模型自检 · synthetic_check.py<br/>按配置启用检查 · 至少一项"]
+    OPTICAL["光学内置案例<br/>级次对齐 / FFT / kurtosis"]
+    GENERIC["generic_check<br/>调用本地算法 · 比较已知真值"]
+    MODEL["model_check<br/>BFS · 不变量 / 死锁 · 最短反例"]
+    SOK{"所配检查<br/>全部通过？"}
+    HUMAN["③ 人工对抗性审查<br/>复核 WARN 与孤儿候选<br/>整理质疑 · 事实 · 答辩依据"]
+    ROK{"人工疑点<br/>已闭环？"}
+    FIX["补充依据或修正结论"]
+    DELIVER["交付通过<br/>一致性报告 + 自检报告 + 审查清单"]
+    BLOCK["阻止交付 · 退出码 1<br/>修正问题后重跑"]
+    ERROR["退出码 2<br/>修正配置与输入后重跑"]
+
+    CFG --> SCAN
+    CFG -. 配置或输入错误 .-> ERROR
+    SCAN --> COK
+    COK -->|是 · 记录 WARN / 候选| SELECT
+    COK -->|否 · 旧口径 FAIL| BLOCK
+    SELECT -->|已配置| OPTICAL
+    SELECT -->|已配置| GENERIC
+    SELECT -->|已配置| MODEL
+    OPTICAL --> SOK
+    GENERIC --> SOK
+    MODEL --> SOK
+    SOK -->|是 · 所配检查 PASS| HUMAN
+    SOK -->|否 · FAIL 或模型 INCONCLUSIVE| BLOCK
+    HUMAN --> ROK
+    ROK -->|否| FIX
+    FIX -. 重新复核 .-> HUMAN
+    ROK -->|是| DELIVER
+
+    classDef input fill:#f1f5f9,stroke:#64748b,color:#0f172a;
+    classDef process fill:#eff6ff,stroke:#3b82f6,color:#0f172a;
+    classDef decision fill:#fff7ed,stroke:#d97706,color:#78350f;
+    classDef failure fill:#fef2f2,stroke:#dc2626,color:#991b1b;
+    classDef manual fill:#f0fdfa,stroke:#0d9488,color:#134e4a;
+    classDef success fill:#f0fdf4,stroke:#16a34a,color:#14532d;
+    class CFG input;
+    class SCAN,SELECT,OPTICAL,GENERIC,MODEL process;
+    class COK,SOK,ROK decision;
+    class BLOCK,ERROR failure;
+    class HUMAN,FIX manual;
+    class DELIVER success;
+```
+
+分支表示按配置选择检查，不代表并行执行；未配置模块不运行。第二层汇总所有已配置结果，模型达到状态上限时以 INCONCLUSIVE 阻止通过。
+两个脚本分别生成报告；第三层和整体交付判断由人工完成。FAIL 或输入错误须修正后重跑；人工修正涉及数据、算法或模型时，也须重跑相应脚本。
+
 ## 快速开始
 
 从仓库根目录运行以下命令。依赖为 NumPy 和 SciPy；当前已在 Windows / Python 3.13 环境验证。
