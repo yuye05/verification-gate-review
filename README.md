@@ -16,57 +16,35 @@
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 18, "padding": 8, "curve": "linear"}, "themeVariables": {"fontSize": "14px"}}}%%
-flowchart TB
-    CFG["配置对齐<br/>gate_config.json · 数据来源 · 扫描范围 · 阈值"]
-    SCAN["① 数值一致性 · check_consistency.py<br/>提取权威数字并扫描文件<br/>旧数字 / 旧文本 · 核心数字 · 孤儿候选"]
-    COK{"旧口径<br/>已清除？"}
-    SELECT["② 算法与模型自检 · synthetic_check.py<br/>按配置启用检查 · 至少一项"]
-    OPTICAL["光学内置案例<br/>级次对齐 / FFT / kurtosis"]
-    GENERIC["generic_check<br/>调用本地算法 · 比较已知真值"]
-    MODEL["model_check<br/>BFS · 不变量 / 死锁 · 最短反例"]
-    SOK{"所配检查<br/>全部通过？"}
-    HUMAN["③ 人工对抗性审查<br/>复核 WARN 与孤儿候选<br/>整理质疑 · 事实 · 答辩依据"]
-    ROK{"人工疑点<br/>已闭环？"}
-    DELIVER["交付通过<br/>一致性报告 + 自检报告 + 审查清单"]
-    FIX["补充依据或修正结论"]
-    BLOCK["阻止交付 · 退出码 1<br/>修正问题后重跑"]
-    ERROR["退出码 2<br/>修正配置与输入后重跑"]
+flowchart LR
+    CFG["配置输入"]
+    NUM["① 数值一致性<br/>数字口径与旧结果"]
+    CHECK["② 算法与模型自检<br/>合成案例 · 有限状态模型"]
+    REVIEW["③ 人工对抗性审查<br/>疑点复核与结论依据"]
+    OUT["报告与审查清单<br/>复核后交付"]
+    FIX["修正问题后复查"]
 
-    CFG --> SCAN
-    CFG -. 配置或输入错误 .-> ERROR
-    SCAN --> COK
-    COK -->|是 · 记录 WARN / 候选| SELECT
-    COK -->|否 · 旧口径 FAIL| BLOCK
-    SELECT -->|已配置| OPTICAL
-    SELECT -->|已配置| GENERIC
-    SELECT -->|已配置| MODEL
-    OPTICAL --> SOK
-    GENERIC --> SOK
-    MODEL --> SOK
-    SOK -->|是 · 所配检查 PASS| HUMAN
-    SOK -->|否 · FAIL 或模型<br/>INCONCLUSIVE| BLOCK
-    HUMAN --> ROK
-    ROK -->|是| DELIVER
-    ROK -->|否| FIX
-    FIX -. 重新复核 .-> HUMAN
-    ERROR ~~~ BLOCK
+    CFG --> NUM
+    NUM -->|通过| CHECK
+    CHECK -->|通过| REVIEW
+    REVIEW -->|通过| OUT
+    NUM -->|未通过| FIX
+    CHECK -->|未通过| FIX
+    REVIEW -->|未通过| FIX
 
     classDef input fill:#f1f5f9,stroke:#64748b,color:#0f172a;
-    classDef process fill:#eff6ff,stroke:#3b82f6,color:#0f172a;
-    classDef decision fill:#fff7ed,stroke:#d97706,color:#78350f;
-    classDef failure fill:#fef2f2,stroke:#dc2626,color:#991b1b;
+    classDef check fill:#eff6ff,stroke:#3b82f6,color:#0f172a;
     classDef manual fill:#f0fdfa,stroke:#0d9488,color:#134e4a;
     classDef success fill:#f0fdf4,stroke:#16a34a,color:#14532d;
+    classDef failure fill:#fef2f2,stroke:#dc2626,color:#991b1b;
     class CFG input;
-    class SCAN,SELECT,OPTICAL,GENERIC,MODEL process;
-    class COK,SOK,ROK decision;
-    class BLOCK,ERROR failure;
-    class HUMAN,FIX manual;
-    class DELIVER success;
+    class NUM,CHECK check;
+    class REVIEW manual;
+    class OUT success;
+    class FIX failure;
 ```
 
-分支表示按配置选择检查，不代表并行执行；未配置模块不运行。第二层汇总所有已配置结果，模型达到状态上限时以 INCONCLUSIVE 阻止通过。
-两个脚本分别生成报告；第三层和整体交付判断由人工完成。FAIL 或输入错误须修正后重跑；人工修正涉及数据、算法或模型时，也须重跑相应脚本。
+第二层按配置执行合成案例和/或有限状态模型检查；检查未完成或疑点未解决时不能交付。两个脚本独立生成报告，第三层及整体交付判断由人工完成。
 
 ## 快速开始
 
