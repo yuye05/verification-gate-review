@@ -1,0 +1,66 @@
+<mxfile host="Electron">
+  <diagram id="verification-workflow" name="验证门禁概览">
+    <mxGraphModel dx="894" dy="778" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="CFG" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Microsoft YaHei;fontSize=14;fillColor=#f1f5f9;strokeColor=#64748b;fontColor=#0f172a;roundedPerimeter=1;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" value="配置输入" vertex="1">
+          <mxGeometry height="40" width="80" x="20" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="NUM" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Microsoft YaHei;fontSize=14;fillColor=#eff6ff;strokeColor=#3b82f6;fontColor=#0f172a;curved=0;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" value="&lt;div style=&quot;line-height: 140%;&quot;&gt;① 数值一致性&lt;br&gt;数字口径与旧结果&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="150" x="120" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="CHECK" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Microsoft YaHei;fontSize=14;fillColor=#eff6ff;strokeColor=#3b82f6;fontColor=#0f172a;roundedPerimeter=1;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" value="&lt;div style=&quot;line-height: 140%;&quot;&gt;② 算法与模型自检&lt;br&gt;合成案例 · 有限状态模型&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="180" x="310" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="REVIEW" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Microsoft YaHei;fontSize=14;fillColor=#f0fdfa;strokeColor=#0d9488;fontColor=#134e4a;roundedPerimeter=1;glass=0;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" value="&lt;div style=&quot;line-height: 140%;&quot;&gt;③ 人工对抗性审查&lt;br&gt;疑点复核与结论依据&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="170" x="530" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="OUT" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Microsoft YaHei;fontSize=14;fillColor=#f0fdf4;strokeColor=#16a34a;fontColor=#14532d;roundedPerimeter=1;shadow=0;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" value="&lt;div style=&quot;line-height: 140%;&quot;&gt;报告与审查清单&lt;br&gt;复核后交付&lt;/div&gt;" vertex="1">
+          <mxGeometry height="60" width="150" x="740" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="FIX" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Microsoft YaHei;fontSize=14;fillColor=#fef2f2;strokeColor=#dc2626;fontColor=#991b1b;roundedPerimeter=1;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" value="&lt;div style=&quot;line-height: 140%;&quot;&gt;修正问题后复查&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="150" x="720" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="cfg-num" edge="1" parent="1" source="CFG" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;exitX=1;exitY=0.5;entryX=0;entryY=0.5;curved=0;fontSize=14;fontStyle=0;spacingTop=0;spacing=2;labelBackgroundColor=none;labelBorderColor=none;" target="NUM" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="num-check" edge="1" parent="1" source="NUM" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;fontFamily=Microsoft YaHei;fontSize=14;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;curved=0;fontStyle=0;spacingTop=0;spacing=2;labelBorderColor=none;" target="CHECK" value="通过">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="check-review" edge="1" parent="1" source="CHECK" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;fontFamily=Microsoft YaHei;fontSize=14;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontStyle=0;spacingTop=0;spacing=2;labelBorderColor=none;" target="REVIEW" value="通过">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="review-out" edge="1" parent="1" source="REVIEW" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;fontFamily=Microsoft YaHei;fontSize=14;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontStyle=0;spacingTop=0;spacing=2;labelBorderColor=none;" target="OUT" value="通过">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="num-fix" edge="1" parent="1" source="NUM" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;fontFamily=Microsoft YaHei;fontSize=14;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;curved=0;fontStyle=0;spacingTop=0;spacing=2;labelBorderColor=none;strokeWidth=2;" target="FIX" value="未通过">
+          <mxGeometry relative="1" x="0.0587" as="geometry">
+            <mxPoint y="-10" as="offset" />
+            <Array as="points">
+              <mxPoint x="200" y="100" />
+              <mxPoint x="200" y="220" />
+              <mxPoint x="795" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="check-fix" edge="1" parent="1" source="CHECK" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;fontFamily=Microsoft YaHei;fontSize=14;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontStyle=0;spacingTop=0;spacing=2;labelBorderColor=none;strokeWidth=2;" target="FIX" value="未通过">
+          <mxGeometry relative="1" x="-0.1123" as="geometry">
+            <mxPoint y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="review-fix" edge="1" parent="1" source="REVIEW" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#64748b;fontFamily=Microsoft YaHei;fontSize=14;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;fontStyle=0;spacingTop=0;spacing=2;labelBorderColor=none;strokeWidth=2;" target="FIX" value="未通过">
+          <mxGeometry relative="1" x="-0.087" as="geometry">
+            <mxPoint y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

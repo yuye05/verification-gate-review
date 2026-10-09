@@ -14,35 +14,9 @@
 
 ## 工作流程
 
-```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 18, "padding": 8, "curve": "linear"}, "themeVariables": {"fontSize": "14px"}}}%%
-flowchart LR
-    CFG["配置输入"]
-    NUM["① 数值一致性<br/>数字口径与旧结果"]
-    CHECK["② 算法与模型自检<br/>合成案例 · 有限状态模型"]
-    REVIEW["③ 人工对抗性审查<br/>疑点复核与结论依据"]
-    OUT["报告与审查清单<br/>复核后交付"]
-    FIX["修正问题后复查"]
+![验证门禁工作流程](references/workflow.png)
 
-    CFG --> NUM
-    NUM -->|通过| CHECK
-    CHECK -->|通过| REVIEW
-    REVIEW -->|通过| OUT
-    NUM -->|未通过| FIX
-    CHECK -->|未通过| FIX
-    REVIEW -->|未通过| FIX
-
-    classDef input fill:#f1f5f9,stroke:#64748b,color:#0f172a;
-    classDef check fill:#eff6ff,stroke:#3b82f6,color:#0f172a;
-    classDef manual fill:#f0fdfa,stroke:#0d9488,color:#134e4a;
-    classDef success fill:#f0fdf4,stroke:#16a34a,color:#14532d;
-    classDef failure fill:#fef2f2,stroke:#dc2626,color:#991b1b;
-    class CFG input;
-    class NUM,CHECK check;
-    class REVIEW manual;
-    class OUT success;
-    class FIX failure;
-```
+[draw.io 可编辑源文件](references/workflow.drawio)
 
 第二层按配置执行合成案例和/或有限状态模型检查；检查未完成或疑点未解决时不能交付。两个脚本独立生成报告，第三层及整体交付判断由人工完成。
 
