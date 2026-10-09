@@ -101,9 +101,68 @@ BFS 遍历可达状态，以父节点和动作回溯最短反例。穷尽后才�
 
 检查仅适用于声明的有限模型；未激活条件和不可达动作需要复核。工具不验证源码一致性、活性或公平性。
 
+## 执行轨迹检查
+
+```json
+{
+  "model_check": {"model": "order_model.json", "max_states": 100},
+  "trace_check": {"trace": "reports/normal_trace.json"}
+}
+```
+
+`trace_check` 是可选段；存在时必须且只能包含非空字符串 `trace`，不能以 `{}` 或 null 表示关闭。
+须同时配置 `model_check.model`，轨迹和 BFS 使用同一模型。模型须声明非空 `terminals`。
+路径相对于配置目录解析；未配置本段时，报告中的 `sections_checked.trace_check=false`、`summary.t_trace_ok=null`。
+
+轨迹必须是仅含 `steps` 的 JSON 对象。`steps` 为非空列表，每项必须且只能包含以下三个字段：
+
+```json
+{
+  "steps": [
+    {
+      "action": "pay",
+      "before": {"paid": false, "shipped": false},
+      "after": {"paid": true, "shipped": false}
+    },
+    {
+      "action": "ship",
+      "before": {"paid": true, "shipped": false},
+      "after": {"paid": true, "shipped": true}
+    }
+  ]
+}
+```
+
+`action` 为非空字符串，匹配模型转换的 `id`。before/after 必须完整赋值全部模型变量，不能包含额外变量；值须在有限域内且类型一致，布尔值不能用 0/1 替代。
+第一版仅接受从模型初始状态开始的一条顺序、完整业务轨迹，记录已执行的动作；不解释拒绝请求、并发事件、时间戳或网络日志。
+
+`scripts/trace_check.py` 的 `check_trace(model, trace)` 先校验整份轨迹格式，再依次检查初始状态、相邻记录连续性、实际状态不变量、动作声明、守卫和原子赋值。
+赋值之外的变量必须保持原值。最后状态须匹配至少一个 terminal；合法前缀未终止返回 `INCONCLUSIVE`，原因 `trace_not_terminal`。
+
+| 情况 | 结果 |
+|---|---|
+| 全部记录符合模型且到达终止状态 | 轨迹 PASS |
+| 初始状态不符、记录不连续、未知动作、守卫不满足、状态不符或不变量违例 | 轨迹 FAIL |
+| 格式合法且符合模型，但末尾未终止 | 轨迹 INCONCLUSIVE |
+| 空轨迹、缺失/额外字段、变量或值/类型错误、缺少模型/终止定义、文件或 JSON 错误 | 配置/输入错误，退出码 2 |
+
+轨迹报告位于原 `门禁报告_合成自检.json` 的 `trace_check` 段：
+
+- `scope="observed_execution_trace"`，`total_steps/steps_checked` 记录动作总数和核对到的位置；`complete=true` 仅表示全部动作通过且到达声明终止状态。
+- FAIL 给出从 1 开始的 `step`、`action`、`before/after`、`reason`、适用的 `expected_before/expected_guard/expected_after/expected_actions`，以及截至违规步骤的 `execution_prefix`。
+- `invariant_violations` 只包含实际 before/after 状态确实违反的不变量，标记 `phase`、条件和断言。每项仅在模型有非空需求编号时附 `requirement`；顶层 `violated_invariant/requirement` 对应首个违例。单纯的动作/守卫/状态匹配失败不会凭空关联需求。
+- `model_sha256/trace_sha256` 为本次读取文件的哈希。模型结果仍单独保存在 `model_check` 段。
+
+轨迹 FAIL/INCONCLUSIVE 阻止第二层通过并返回 1。即使轨迹 PASS，模型 FAIL 或达到状态上限仍阻止总体通过。
+报告中的执行前缀是本次运行证据，不是 BFS 搜索得到的最短模型反例。
+
+示例程序不读取模型，独立采集实际状态；运行方式见 [README 演示](../README.md#演示模型正确程序仍可能出错)。
+接入其他程序时需保证动作和变量映射一致，并人工复核采集完整性。连续性检查和输入哈希不能证明日志没有遗漏，也不能证明未观测的程序执行正确。
+
 ## 输出及迁移
 
 - 一致性输出 Markdown；第二层输出 JSON，`sections_checked` 标明范围，未运行项的 summary 为 null。
 - 退出码 0/1/2 表示脚本通过、检查失败或未完成、配置或输入错误。一致性 0 仍可能含复核项。
 - 从旧版本迁移时，`rel` 已统一为百分数；`abs` 需改用 `abs_tolerance`；callback 须指定 generator。
 - 旧口径 FAIL 现在返回非零退出码，自动化调用方应检查进程状态和本次报告。
+- 新增 `trace_check`、`sections_checked.trace_check` 和 `summary.t_trace_ok`；旧配置无须修改，消费者应允许这些新增字段。输入错误不会生成成功报告，旧报告不能替代本次结果。

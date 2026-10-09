@@ -1,0 +1,9 @@
+{
+  "authoritative_json": ["expected_results.json"],
+  "scan_dirs": ["docs"],
+  "scan_globs": [".md"],
+  "core_docs": ["results.md"],
+  "output_dir": "reports/trace_pass",
+  "model_check": {"model": "order_model.json", "max_states": 100},
+  "trace_check": {"trace": "reports/normal_trace.json"}
+}

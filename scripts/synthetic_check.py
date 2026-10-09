@@ -1,4 +1,4 @@
-"""验证门禁②：已知答案测试与可选的有限状态模型检查（配置驱动）。
+"""验证门禁②：已知答案测试、有限状态模型与执行轨迹检查（配置驱动）。
 
 用"已知答案"的合成数据跑算法，验证还原误差 < pass_threshold_pct ——
 检查所选案例的还原误差（不只测噪声鲁棒）。从 gate_config.json 读取要验证的
@@ -42,6 +42,7 @@ generic_check 配置格式：
 - algo 返回估计值（标量/数组），与真值对比算误差；误差 < pass_threshold_pct 判 PASS。
 - truth 可为标量或数组（数组则逐元素算误差取最大）。rel/rel_abs 均以百分数报告；
   abs 使用 abs_tolerance。model_check 可另配 model 路径和 max_states。
+- trace_check 配置 trace 路径，使用同配置的 model_check 模型核对完整执行轨迹。
 
 输出：门禁报告_合成自检.json（落盘到 output_dir，默认=配置文件目录）
 运行：python synthetic_check.py --config <path/to/gate_config.json>
@@ -61,6 +62,7 @@ from scipy.signal import savgol_filter
 from scipy.optimize import minimize_scalar
 
 from model_check import check_model
+from trace_check import check_trace
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -457,7 +459,7 @@ def test_generic(cfg, cfg_dir):
 # Main
 # ═══════════════════════════════════════════════════════════════
 def main():
-    ap = argparse.ArgumentParser(description="验证门禁②：合成数据自检与有限状态模型检查")
+    ap = argparse.ArgumentParser(description="验证门禁②：算法、有限模型与执行轨迹检查")
     ap.add_argument("--config", default="gate_config.json",
                     help="gate_config.json 路径（默认当前目录 gate_config.json）")
     ap.add_argument("--outdir", default=None, help="报告落盘目录（覆盖配置里的 output_dir）")
@@ -468,6 +470,14 @@ def main():
         raise FileNotFoundError(f"找不到配置文件: {cfg_path}")
     cfg_dir = cfg_path.resolve().parent
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    trace_enabled = "trace_check" in cfg
+    if trace_enabled:
+        trace_cfg = cfg["trace_check"]
+        if (not isinstance(trace_cfg, dict) or set(trace_cfg) != {"trace"}
+                or not isinstance(trace_cfg["trace"], str) or not trace_cfg["trace"]):
+            raise ValueError("trace_check 必须且只能配置非空字符串 trace 路径")
+        if not isinstance(cfg.get("model_check"), dict) or not cfg["model_check"].get("model"):
+            raise ValueError("trace_check 必须同时配置 model_check.model")
     out_dir = Path(args.outdir) if args.outdir else Path(cfg.get("output_dir", cfg_dir))
     if not out_dir.is_absolute():
         out_dir = cfg_dir / out_dir
@@ -477,7 +487,7 @@ def main():
         raise ValueError("pass_threshold_pct 必须是正有限数")
 
     print("=" * 68)
-    print("验证门禁②：合成数据自检与有限状态模型检查")
+    print("验证门禁②：算法、有限模型与执行轨迹检查")
     print(f"配置: {cfg_path.resolve()}")
     print("=" * 68)
     if any(cfg.get(key) for key in ("order_alignment", "fft", "kurtosis")):
@@ -550,13 +560,27 @@ def main():
     if model_cfg:
         model_path = cfg_dir / model_cfg["model"]
         model_bytes = model_path.read_bytes()
-        model_result = check_model(json.loads(model_bytes), model_cfg.get("max_states", 10000))
+        model = json.loads(model_bytes)
+        model_result = check_model(model, model_cfg.get("max_states", 10000))
         model_result["model_sha256"] = hashlib.sha256(model_bytes).hexdigest()
         results["model_check"] = model_result
         print(f"\n【M】有限状态模型: {model_result['verdict']}，"
               f"已检查 {model_result['explored_states']} 个状态")
         if "counterexample" in model_result:
             print(f"  反例: {json.dumps(model_result['counterexample'], ensure_ascii=False)}")
+        if trace_enabled:
+            trace_path = cfg_dir / trace_cfg["trace"]
+            trace_bytes = trace_path.read_bytes()
+            trace_result = check_trace(model, json.loads(trace_bytes))
+            trace_result["model_sha256"] = model_result["model_sha256"]
+            trace_result["trace_sha256"] = hashlib.sha256(trace_bytes).hexdigest()
+            results["trace_check"] = trace_result
+            print(f"\n【T】执行轨迹: {trace_result['verdict']}，"
+                  f"已核对 {trace_result['steps_checked']}/{trace_result['total_steps']} 个动作")
+            if "reason" in trace_result:
+                print(f"  原因: {trace_result['reason']}，步骤: {trace_result.get('step', '结束位置')}")
+            if "execution_prefix" in trace_result:
+                print(f"  违规执行前缀: {json.dumps(trace_result['execution_prefix'], ensure_ascii=False)}")
     if not results:
         raise ValueError("至少配置一项算法自检或 model_check")
 
@@ -568,9 +592,10 @@ def main():
     n_pass = sum(1 for sec in ("order_alignment", "fft", "generic_check") for r in results.get(sec, []) if r["ok"])
     n_total = sum(len(results.get(sec, [])) for sec in ("order_alignment", "fft", "generic_check"))
     m_ok = results.get("model_check", {}).get("ok", True)
-    all_ok = a_ok and b_ok and c_ok and g_ok and m_ok
+    t_ok = results.get("trace_check", {}).get("ok", True)
+    all_ok = a_ok and b_ok and c_ok and g_ok and m_ok and t_ok
     print("\n" + "=" * 68)
-    print(f"判定: {'PASS — 所配检查通过' if all_ok else 'FAIL — 检查失败或模型检查未完成'}")
+    print(f"判定: {'PASS — 所配检查通过' if all_ok else 'FAIL — 检查失败或检查未完成'}")
     print(f"  已运行检查: {', '.join(results)}")
     if n_total:
         print(f"  还原测试通过 {n_pass}/{n_total}（通用用例的具体阈值/单位见逐例结果）")
@@ -588,12 +613,14 @@ def main():
             "kurtosis": "kurtosis_criterion" in results,
             "generic_check": "generic_check" in results,
             "model_check": "model_check" in results,
+            "trace_check": "trace_check" in results,
         },
         "summary": {"a_alignment_ok": a_ok if "order_alignment" in results else None,
                     "b_fft_ok": b_ok if "fft" in results else None,
                     "c_kurtosis_ok": c_ok if "kurtosis_criterion" in results else None,
                     "g_generic_ok": g_ok if "generic_check" in results else None,
                     "m_model_ok": m_ok if "model_check" in results else None,
+                    "t_trace_ok": t_ok if "trace_check" in results else None,
                     "passed": n_pass, "total": n_total},
         **results,
     }

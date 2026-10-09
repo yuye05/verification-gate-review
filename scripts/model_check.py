@@ -4,10 +4,26 @@ from collections import deque
 from math import prod
 
 
-def check_model(model, max_states=10000):
-    """JSON 有限域 + 等值守卫/赋值 + 条件不变量；不使用 eval 或外部求解器。"""
-    if type(max_states) is not int or max_states < 1:
-        raise ValueError("max_states 必须是正整数")
+def matches(state, pattern):
+    return all(state[name] == value for name, value in pattern.items())
+
+
+def validate_pattern(domains, pattern, context, required=False):
+    if not isinstance(pattern, dict) or (required and not pattern):
+        raise ValueError(f"{context}: 必须是{'非空' if required else ''}变量映射")
+    for name, value in pattern.items():
+        if name not in domains or not any(type(value) is type(v) and value == v for v in domains[name]):
+            raise ValueError(f"{context}: 未声明的变量或域外值 {name}={value!r}")
+
+
+def validate_state(domains, state, context):
+    validate_pattern(domains, state, context, required=True)
+    if set(state) != set(domains):
+        raise ValueError(f"{context}: 必须赋值全部变量")
+
+
+def validate_model(model):
+    """模型和轨迹检查共用同一套有限域、守卫及不变量语义。"""
     if not isinstance(model, dict):
         raise ValueError("模型必须是 JSON 对象")
     domains = model.get("variables")
@@ -22,22 +38,8 @@ def check_model(model, max_states=10000):
         if len(set(values)) != len(values):
             raise ValueError(f"{name}: 有限域包含重复值")
 
-    names = tuple(domains)
-
-    def validate_pattern(pattern, context, required=False):
-        if not isinstance(pattern, dict) or (required and not pattern):
-            raise ValueError(f"{context}: 必须是{'非空' if required else ''}变量映射")
-        for name, value in pattern.items():
-            if name not in domains or not any(type(value) is type(v) and value == v for v in domains[name]):
-                raise ValueError(f"{context}: 未声明的变量或域外值 {name}={value!r}")
-
-    def matches(state, pattern):
-        return all(state[name] == value for name, value in pattern.items())
-
     initial = model.get("initial")
-    validate_pattern(initial, "initial", required=True)
-    if set(initial) != set(names):
-        raise ValueError("initial 必须赋值全部变量")
+    validate_state(domains, initial, "initial")
     actions = model.get("transitions")
     invariants = model.get("invariants")
     if not isinstance(actions, list) or not actions:
@@ -55,20 +57,33 @@ def check_model(model, max_states=10000):
     for action in actions:
         if set(action) - {"id", "description", "guard", "set"}:
             raise ValueError(f"{action['id']}: 未知转换字段，不得忽略守卫拼写错误")
-        validate_pattern(action.get("guard", {}), f"{action['id']}.guard")
-        validate_pattern(action.get("set"), f"{action['id']}.set", required=True)
+        validate_pattern(domains, action.get("guard", {}), f"{action['id']}.guard")
+        validate_pattern(domains, action.get("set"), f"{action['id']}.set", required=True)
     for invariant in invariants:
         if set(invariant) - {"id", "description", "requirement", "when", "assert"}:
             raise ValueError(f"{invariant['id']}: 未知不变量字段")
         if not isinstance(invariant.get("requirement", ""), str):
             raise ValueError(f"{invariant['id']}: requirement 必须是字符串")
-        validate_pattern(invariant.get("when", {}), f"{invariant['id']}.when")
-        validate_pattern(invariant.get("assert"), f"{invariant['id']}.assert", required=True)
+        validate_pattern(domains, invariant.get("when", {}), f"{invariant['id']}.when")
+        validate_pattern(domains, invariant.get("assert"), f"{invariant['id']}.assert", required=True)
     terminals = model.get("terminals", [])
     if not isinstance(terminals, list):
         raise ValueError("terminals 必须是变量映射列表")
     for terminal in terminals:
-        validate_pattern(terminal, "terminals", required=True)
+        validate_pattern(domains, terminal, "terminals", required=True)
+
+
+def check_model(model, max_states=10000):
+    """JSON 有限域 + 等值守卫/赋值 + 条件不变量；不使用 eval 或外部求解器。"""
+    if type(max_states) is not int or max_states < 1:
+        raise ValueError("max_states 必须是正整数")
+    validate_model(model)
+    domains = model["variables"]
+    names = tuple(domains)
+    initial = model["initial"]
+    actions = model["transitions"]
+    invariants = model["invariants"]
+    terminals = model.get("terminals", [])
 
     start = tuple(initial[name] for name in names)
     queue = deque([start])

@@ -2,14 +2,14 @@
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-配置驱动的验证门禁工具：核对数字口径、检查算法合成案例，并可选地验证有限状态模型，输出可复现的检查报告与疑点清单。
+配置驱动的验证门禁工具：核对数字口径、检查算法合成案例，并可选地验证有限状态模型及程序执行轨迹，输出可复现的检查报告与疑点清单。
 
 适合数值建模、论文结果交付和小型工作流验证。项目保留三层流程：
 
 | 层级 | 实现 | 检查内容 |
 |---|---|---|
 | 数值一致性 | `scripts/check_consistency.py` | 权威数字出现情况、废弃数字/文本残留、孤儿数字候选 |
-| 算法与模型自检 | `scripts/synthetic_check.py` | 已知答案还原误差；可选有限模型的不变量、死锁与最短反例 |
+| 算法与模型自检 | `scripts/synthetic_check.py` | 已知答案还原误差；有限模型检查；实际执行轨迹与模型的一致性 |
 | 对抗性审查 | 人工或 AI 辅助整理 | 质疑核心结论，记录事实、答辩依据与待补事项 |
 
 ## 工作流程
@@ -18,7 +18,7 @@
 
 [draw.io 可编辑源文件](references/workflow.drawio)
 
-第二层按配置执行合成案例和/或有限状态模型检查；检查未完成或疑点未解决时不能交付。两个脚本独立生成报告，第三层及整体交付判断由人工完成。
+第二层按配置执行合成案例、有限状态模型检查及可选执行轨迹检查；检查未完成或疑点未解决时不能交付。两个脚本独立生成报告，第三层及整体交付判断由人工完成。
 
 ## 快速开始
 
@@ -50,10 +50,35 @@ python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/g
 这是预期的缺陷检测结果；报告生成到示例的 `reports/negative_control/`。
 第三层记录见[对抗性审查清单](examples/microservice_order/docs/对抗性审查清单.md)。
 
+## 演示：模型正确，程序仍可能出错
+
+本地[订单程序](examples/microservice_order/order_program.py)独立实现付款与发货，不读取模型；每个已执行动作记录实际的前后状态。
+先生成正常轨迹，再用同一正确模型检查：
+
+```bash
+python -X utf8 examples/microservice_order/order_program.py --scenario normal --out examples/microservice_order/reports/normal_trace.json
+python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config_trace.json
+```
+
+预期：模型 PASS、轨迹 PASS、退出码 0。报告位于 `examples/microservice_order/reports/trace_pass/`。
+
+再运行故意漏掉付款检查的程序：
+
+```bash
+python -X utf8 examples/microservice_order/order_program.py --scenario unpaid_shipping --out examples/microservice_order/reports/unpaid_shipping_trace.json
+python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config_trace_buggy.json
+```
+
+预期：**模型仍 PASS，轨迹 FAIL，总体退出码 1**。报告定位第 1 步 `ship`：付款守卫未满足，实际发货状态也违反 `REQ-ORDER-001`。
+报告位于示例的 `reports/trace_negative_control/`。程序生成轨迹成功不代表验证通过，须查看第二条命令的结果。
+
+轨迹检查按顺序核对初始状态、记录连续性、动作守卫、状态赋值及不变量。合法记录尚未到达声明的终止状态时返回 INCONCLUSIVE。
+模型 BFS 的反例是模型中最短的动作路径；轨迹报告给出本次运行首次违规的位置和执行前缀。
+
 ## 在自己的项目中使用
 
 1. 参考[配置说明](references/configuration.md)和[配置模板](references/gate_config.example.json)，创建项目的 `gate_config.json`。
-2. 指定权威数字来源、扫描文件和需执行的算法/模型检查。模板中的光学路径及旧数字是示例，使用前须替换。
+2. 指定权威数字来源、扫描文件和需执行的算法/模型检查；如启用轨迹检查，先采集符合约定的执行记录。模板中的光学路径及旧数字是示例，使用前须替换。
 3. 运行两个脚本，处理 FAIL 项，并复核 WARN 和孤儿候选。
 4. 针对核心结论填写 `对抗性审查清单.md`，注明检查范围后再交付。
 
@@ -64,6 +89,7 @@ python -X utf8 scripts/synthetic_check.py --config /path/to/gate_config.json
 
 配置中的相对路径以**配置文件所在目录**为基准。两个脚本均支持 `--outdir` 覆盖报告目录。
 第二层至少配置一项光学检查、`generic_check` 或 `model_check`；未配置的检查不会被当作已执行。
+`trace_check` 必须同时配置 `model_check`，使用同一模型且要求声明非空 `terminals`。详细格式见[轨迹配置](references/configuration.md#执行轨迹检查)。
 
 ## 判定与产物
 
@@ -72,16 +98,17 @@ python -X utf8 scripts/synthetic_check.py --config /path/to/gate_config.json
 | 一致性 | 旧数字或旧文本命中即 FAIL；核心数字缺失为 WARN；孤儿数字列为复核候选 |
 | 算法自检 | 误差须严格小于阈值；空案例、非有限结果、形状不符和算法异常不能通过 |
 | 模型检查 | 不变量违例或非终止死锁为 FAIL；达到状态上限为 INCONCLUSIVE，阻止通过 |
+| 轨迹检查 | 动作、守卫、状态变化、连续性或不变量违规为 FAIL；合法未终止为 INCONCLUSIVE，阻止通过 |
 | 对抗性审查 | 人工确认质疑点已有依据和答辩，明确记录未解决事项 |
 
 | 退出码 | 含义 |
 |---|---|
 | `0` | 该脚本通过；一致性结果仍可能包含 WARN/候选 |
-| `1` | 检查失败，或模型检查尚未穷尽 |
+| `1` | 检查失败，模型检查未穷尽，或轨迹尚未到达终止状态 |
 | `2` | 配置或输入错误 |
 
 输出包括 `门禁报告_一致性.md`、`门禁报告_合成自检.json` 和人工整理的 `对抗性审查清单.md`。
-JSON 报告包含所运行检查、误差或模型反例，以及配置/模型 SHA-256。
+JSON 报告包含所运行检查、误差、模型反例或轨迹违规位置，以及配置/模型/已检查轨迹的 SHA-256。
 运行报告含时间戳与本机路径，作为本地证据使用，不随源码提交。
 
 整套门禁通过要求：一致性无 FAIL、第二层所配检查全部通过、WARN/候选已复核、对抗清单已有答辩依据。
@@ -92,6 +119,7 @@ JSON 报告包含所运行检查、误差或模型反例，以及配置/模型 S
 - 数字检查按数值和容差匹配，不理解句子语义，不自动换算物理单位或百分比；孤儿候选仍采用启发式。
 - 合成测试只覆盖所选输入，不能据此证明算法在全部输入上正确。
 - 模型检查穷尽的是声明的有限模型，不验证实际服务代码、分布式消息行为、活性或公平性。
+- 轨迹检查只验证已记录的顺序执行及其显式状态；日志完整性、状态映射和采集代码仍需人工复核。SHA-256 标识输入文件，不证明日志来源可信。示例为本地程序，不是已部署的微服务。
 - `generic_check` 会导入执行本地 Python 模块，只使用来源可信、已经审查的代码。
 - 本工具不替代论文结构审查、代码审查或真实系统测试。
 
@@ -102,7 +130,7 @@ python -X utf8 evals/check_regressions.py
 python -X utf8 scripts/synthetic_check.py --config references/gate_config.example.json --outdir ../evals/optical_smoke
 ```
 
-当前回归入口包含 45 项检查，覆盖正常结果、缺陷负例、配置错误、数值边界和模型状态上限。
+当前回归入口包含 86 项检查，覆盖正常结果、缺陷负例、配置错误、数值边界、模型状态上限及程序轨迹。
 光学示例包含 9 个还原案例和 kurtosis 判据。实际判定以本次命令输出为准。
 贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，待发布变更见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -120,10 +148,11 @@ verification-gate-review/
 ├── LICENSE / AUTHORSHIP.md
 ├── CONTRIBUTING.md / CHANGELOG.md
 ├── requirements.txt
-├── scripts/                  # 一致性、合成自检、有限模型检查
+├── scripts/                  # 一致性、合成自检、有限模型与轨迹检查
 ├── references/               # 配置说明、模板、设计与后续方向
 ├── examples/microservice_order/
 │   ├── *.json                # 配置、正确模型、缺陷模型与预期值
+│   ├── order_program.py      # 独立订单程序及缺陷实现，生成实际轨迹
 │   └── docs/                 # 结果说明与对抗清单
 └── evals/                    # 回归入口与 Skill 使用评估案例
 ```

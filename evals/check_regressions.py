@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+import hashlib
 import json
 import shutil
 import subprocess
@@ -15,6 +16,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from check_consistency import extract_tokens
 from model_check import check_model
 from synthetic_check import _estimate_error, test_generic
+from trace_check import check_trace
+
+sys.path.insert(0, str(ROOT / "examples/microservice_order"))
+from order_program import Order, run_order
 
 
 def run_checks():
@@ -69,6 +74,92 @@ def run_checks():
     invalid["transitions"][1]["gaurd"] = invalid["transitions"][1].pop("guard")
     invalid_model("guard_typo_rejected", invalid)
     invalid_model("non_object_model_rejected", [])
+
+    normal_trace = run_order("normal")
+    trace_snapshot = copy.deepcopy(normal_trace)
+    good_trace = check_trace(model, normal_trace)
+    check("trace_full_program_pass", good_trace["ok"] and good_trace["complete"]
+          and good_trace["steps_checked"] == 2 and good_trace["scope"] == "observed_execution_trace")
+    check("trace_input_not_mutated", normal_trace == trace_snapshot)
+    try:
+        Order().ship()
+    except ValueError:
+        check("correct_program_rejects_unpaid_shipping", True)
+    else:
+        check("correct_program_rejects_unpaid_shipping", False)
+    buggy_trace = run_order("unpaid_shipping")
+    bad_trace = check_trace(model, buggy_trace)
+    check("trace_correct_model_detects_buggy_program", good["ok"] and bad_trace["verdict"] == "FAIL"
+          and bad_trace["reason"] == "guard_not_satisfied" and bad_trace["step"] == 1)
+    check("trace_real_invariant_links_requirement", bad_trace["requirement"] == "REQ-ORDER-001"
+          and bad_trace["invariant_violations"][0]["phase"] == "after"
+          and bad_trace["execution_prefix"] == buggy_trace["steps"])
+    guard_only = copy.deepcopy(buggy_trace)
+    guard_only["steps"][0]["after"] = guard_only["steps"][0]["before"].copy()
+    guard_result = check_trace(model, guard_only)
+    check("trace_guard_failure_does_not_invent_requirement", guard_result["reason"] == "guard_not_satisfied"
+          and "requirement" not in guard_result and not guard_result["invariant_violations"])
+    wrong_state = copy.deepcopy(normal_trace)
+    wrong_state["steps"][0]["after"]["paid"] = False
+    state_result = check_trace(model, wrong_state)
+    check("trace_assignment_mismatch", state_result["reason"] == "state_mismatch"
+          and state_result["expected_after"] == {"paid": True, "shipped": False}
+          and "requirement" not in state_result)
+    wrong_state = copy.deepcopy(normal_trace)
+    wrong_state["steps"][0]["after"]["shipped"] = True
+    check("trace_unchanged_variable_mismatch", check_trace(model, wrong_state)["reason"] == "state_mismatch")
+    discontinuous = copy.deepcopy(normal_trace)
+    discontinuous["steps"][1]["before"]["paid"] = False
+    gap_result = check_trace(model, discontinuous)
+    check("trace_continuity_checked", gap_result["reason"] == "trace_discontinuity"
+          and gap_result["step"] == 2 and gap_result["expected_before"] == normal_trace["steps"][0]["after"])
+    wrong_initial = copy.deepcopy(normal_trace)
+    wrong_initial["steps"][0]["before"]["paid"] = True
+    check("trace_initial_state_checked", check_trace(model, wrong_initial)["reason"] == "initial_state_mismatch")
+    unknown = copy.deepcopy(normal_trace)
+    unknown["steps"][0]["action"] = "refund"
+    check("trace_unknown_action_fails", check_trace(model, unknown)["reason"] == "unknown_action")
+    prefix = {"steps": normal_trace["steps"][:1]}
+    incomplete = check_trace(model, prefix)
+    check("trace_prefix_inconclusive", incomplete["verdict"] == "INCONCLUSIVE"
+          and not incomplete["ok"] and not incomplete["complete"])
+    check("trace_checks_invariants_after", check_trace(bad_model, buggy_trace)["reason"] == "invariant_violation")
+    initial_bad_trace = {"steps": [{"action": "pay", "before": initial_bad["initial"].copy(),
+                                   "after": {"paid": True, "shipped": True}}]}
+    check("trace_checks_initial_invariants", check_trace(initial_bad, initial_bad_trace)["reason"] == "invariant_violation")
+
+    def invalid_trace(name, value, trace_model=model):
+        try:
+            check_trace(trace_model, value)
+        except ValueError:
+            check(name, True)
+        else:
+            check(name, False)
+
+    invalid_trace("trace_non_object_rejected", [])
+    invalid_trace("trace_empty_steps_rejected", {"steps": []})
+    malformed = copy.deepcopy(normal_trace)
+    del malformed["steps"][0]["action"]
+    invalid_trace("trace_missing_field_rejected", malformed)
+    malformed = copy.deepcopy(normal_trace)
+    malformed["steps"][0]["after"]["paid"] = 1
+    invalid_trace("trace_bool_integer_alias_rejected", malformed)
+    malformed = copy.deepcopy(normal_trace)
+    malformed["steps"][0]["after"]["paid"] = "true"
+    invalid_trace("trace_out_of_domain_rejected", malformed)
+    malformed = copy.deepcopy(normal_trace)
+    del malformed["steps"][0]["before"]["shipped"]
+    invalid_trace("trace_partial_state_rejected", malformed)
+    malformed = copy.deepcopy(normal_trace)
+    malformed["steps"][0]["after"]["unknown"] = False
+    invalid_trace("trace_unknown_state_variable_rejected", malformed)
+    malformed = copy.deepcopy(normal_trace)
+    malformed["steps"][0]["actions"] = "ship"
+    invalid_trace("trace_unknown_record_field_rejected", malformed)
+    malformed = copy.deepcopy(buggy_trace)
+    malformed["steps"].append({})
+    invalid_trace("trace_validates_entire_input_before_behavior", malformed)
+    invalid_trace("trace_requires_terminals", normal_trace, deadlock)
     check("relative_error_percent", _estimate_error(101, 100, "rel")[0] == 1.0)
     check("negative_truth_error", _estimate_error(-101, -100, "rel_abs")[0] == 1.0)
     check("zero_truth_exact", _estimate_error(0, 0)[0] == 0.0)
@@ -154,12 +245,71 @@ def run_checks():
         saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
         check("model_cli_pass_and_hash", proc.returncode == 0 and saved["verdict"] == "PASS" and len(saved["model_check"]["model_sha256"]) == 64)
         check("unconfigured_checks_not_reported_as_pass", saved["summary"]["a_alignment_ok"] is None and saved["sections_checked"]["order_alignment"] is False)
+        check("unconfigured_trace_not_reported_as_pass", saved["summary"]["t_trace_ok"] is None
+              and saved["sections_checked"]["trace_check"] is False)
         model_cfg["model_check"]["max_states"] = 2
         check("model_inconclusive_blocks_cli", cli("synthetic_check.py", model_cfg).returncode == 1)
         model_cfg["model_check"] = {"model": str(example / "order_model_buggy.json")}
         proc = cli("synthetic_check.py", model_cfg)
         saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
         check("negative_control_cli_blocks", proc.returncode == 1 and saved["model_check"]["requirement"] == "REQ-ORDER-001")
+
+        for scenario in ("normal", "unpaid_shipping"):
+            trace_path = scratch / f"{scenario}.json"
+            proc = subprocess.run([sys.executable, "-X", "utf8", str(example / "order_program.py"),
+                                   "--scenario", scenario, "--out", str(trace_path)],
+                                  capture_output=True, text=True, encoding="utf-8", timeout=120)
+            actual = json.loads(trace_path.read_text(encoding="utf-8")) if trace_path.exists() else None
+            check(f"program_cli_{scenario}_records_actual_state", proc.returncode == 0 and actual == run_order(scenario))
+        trace_path = scratch / "normal.json"
+        trace_cfg = {"model_check": {"model": str(example / "order_model.json")},
+                     "trace_check": {"trace": "normal.json"}, "output_dir": "reports"}
+        proc = cli("synthetic_check.py", trace_cfg)
+        saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
+        check("trace_cli_pass_and_hashes", proc.returncode == 0 and saved["verdict"] == "PASS"
+              and saved["summary"]["t_trace_ok"] is True and saved["sections_checked"]["trace_check"] is True
+              and saved["trace_check"]["trace_sha256"] == hashlib.sha256(trace_path.read_bytes()).hexdigest()
+              and saved["trace_check"]["model_sha256"] == saved["model_check"]["model_sha256"])
+        trace_cfg["trace_check"]["trace"] = "unpaid_shipping.json"
+        proc = cli("synthetic_check.py", trace_cfg)
+        saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
+        check("trace_cli_bug_blocks_with_correct_model", proc.returncode == 1 and saved["model_check"]["ok"]
+              and not saved["trace_check"]["ok"] and saved["trace_check"]["requirement"] == "REQ-ORDER-001")
+        (scratch / "prefix.json").write_text(json.dumps(prefix), encoding="utf-8")
+        trace_cfg["trace_check"]["trace"] = "prefix.json"
+        proc = cli("synthetic_check.py", trace_cfg)
+        saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
+        check("trace_cli_incomplete_blocks", proc.returncode == 1 and saved["verdict"] == "FAIL"
+              and saved["trace_check"]["verdict"] == "INCONCLUSIVE")
+        trace_cfg["trace_check"]["trace"] = "normal.json"
+        trace_cfg["model_check"]["model"] = str(example / "order_model_buggy.json")
+        proc = cli("synthetic_check.py", trace_cfg)
+        saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
+        check("trace_pass_does_not_override_model_fail", proc.returncode == 1 and saved["trace_check"]["ok"]
+              and not saved["model_check"]["ok"])
+        trace_cfg["model_check"] = {"model": str(example / "order_model.json"), "max_states": 2}
+        proc = cli("synthetic_check.py", trace_cfg)
+        saved = json.loads(synthetic_report.read_text(encoding="utf-8"))
+        check("trace_pass_does_not_override_model_limit", proc.returncode == 1 and saved["trace_check"]["ok"]
+              and saved["model_check"]["verdict"] == "INCONCLUSIVE")
+        check("trace_cli_requires_model", cli("synthetic_check.py", {"trace_check": {"trace": "normal.json"}}).returncode == 2)
+        for invalid_config in ({}, None):
+            check("trace_cli_rejects_empty_config_" + str(invalid_config),
+                  cli("synthetic_check.py", {"trace_check": invalid_config}).returncode == 2)
+        trace_cfg["trace_check"]["trace"] = "missing.json"
+        check("trace_cli_missing_file_error", cli("synthetic_check.py", trace_cfg).returncode == 2)
+        (scratch / "malformed.json").write_text("not JSON", encoding="utf-8")
+        trace_cfg["trace_check"]["trace"] = "malformed.json"
+        check("trace_cli_invalid_json_error", cli("synthetic_check.py", trace_cfg).returncode == 2)
+        for name, invalid_input in (("empty", {"steps": []}), ("fields", {"steps": [{}]}),
+                                    ("types", {"steps": [{"action": "pay", "before": {"paid": 0, "shipped": False},
+                                                          "after": {"paid": True, "shipped": False}}]})):
+            (scratch / "malformed.json").write_text(json.dumps(invalid_input), encoding="utf-8")
+            check("trace_cli_invalid_" + name + "_error", cli("synthetic_check.py", trace_cfg).returncode == 2)
+        (scratch / "no_terminal_model.json").write_text(json.dumps(deadlock), encoding="utf-8")
+        trace_cfg["model_check"] = {"model": "no_terminal_model.json"}
+        trace_cfg["trace_check"]["trace"] = "normal.json"
+        check("trace_cli_requires_terminals", cli("synthetic_check.py", trace_cfg).returncode == 2)
     finally:
         assert scratch.parent == ROOT and scratch.name.startswith(".gate-check-")
         shutil.rmtree(scratch)
