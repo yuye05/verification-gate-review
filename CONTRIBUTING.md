@@ -9,14 +9,20 @@ git clone https://github.com/yuye05/verification-gate-review.git
 cd verification-gate-review
 python -m pip install -r requirements.txt
 python -X utf8 evals/check_regressions.py
+python -X utf8 evals/check_demo.py
+python -X utf8 examples/microservice_order/run_demo.py
 ```
 
-当前已在 Windows / Python 3.13 验证。光学与订单示例的运行命令见 [README](README.md#验证与开发) 和[设计说明](references/design-notes.md#验证方式)。
+请先按 [README](README.md#快速开始)创建独立虚拟环境；上面的 `python` 指该环境解释器，不需要激活环境。
+当前已在 Windows / Python 3.13 验证。86 项核心回归与 6 项演示端到端测试分开计数；演示测试会在独立副本中注入错误，不改动原例子。
+Windows/Ubuntu 的 GitHub Actions 工作流已配置，远端执行结果以 Actions 页面为准；本机测试不能替代 Ubuntu/macOS 验证。
+光学与分步订单命令见[进阶使用](references/advanced-usage.md)。
 
 ## 问题反馈
 
 请提供最小复现步骤、Python/依赖版本、相关配置、预期结果与实际结果。
-负对照返回 FAIL/退出码 1 是预期行为；报告中如有私人路径、业务数据或密钥，请先脱敏。
+直接运行缺陷检查时，FAIL/退出码 1 是预期行为；`run_demo.py` 会核对两个场景，只有都符合预期才退出 0。不要把检查器崩溃或缺失报告当成检出缺陷。
+报告中如有私人路径、业务数据或密钥，请先脱敏。首次使用反馈也欢迎说明卡在哪一步、是否能独立跑通、准备接入什么流程。
 
 ## Pull Request
 

@@ -2,162 +2,159 @@
 
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-配置驱动的验证门禁工具：核对数字口径、检查算法合成案例，并可选地验证有限状态模型及程序执行轨迹，输出可复现的检查报告与疑点清单。
+**检查小型工作流的有限状态模型与实际执行轨迹，定位违反规则的步骤。**
 
-适合数值建模、论文结果交付和小型工作流验证。项目保留三层流程：
+适合能描述业务状态、规则，并采集顺序执行记录的开发者。项目也保留数值一致性与算法自检能力，见[进阶使用](references/advanced-usage.md)。
 
-| 层级 | 实现 | 检查内容 |
-|---|---|---|
-| 数值一致性 | `scripts/check_consistency.py` | 权威数字出现情况、废弃数字/文本残留、孤儿数字候选 |
-| 算法与模型自检 | `scripts/synthetic_check.py` | 已知答案还原误差；有限模型检查；实际执行轨迹与模型的一致性 |
-| 对抗性审查 | 人工或 AI 辅助整理 | 质疑核心结论，记录事实、答辩依据与待补事项 |
+A small Python tool for checking finite-state models and recorded sequential executions. The payment/shipping demo shows how a valid model can coexist with a buggy implementation. It checks declared models and observed traces, not arbitrary source code or all system behavior.
 
-## 工作流程
+## 演示结果
 
-![验证门禁工作流程](references/workflow.png)
+规则很简单：**发货前必须已付款**。正确模型有 4 个状态组合，其中 3 个可达；两个独立程序分别执行正常流程和故意漏掉付款检查的流程。
 
-[draw.io 可编辑源文件](references/workflow.drawio)
+| 程序执行 | 模型检查 | 轨迹检查 | 解释 |
+|---|---|---|---|
+| 付款 → 发货 | PASS | PASS | 本次记录符合规则并到达终止状态 |
+| 未付款 → 直接发货 | PASS | FAIL | 模型没错，但程序第 1 步 `ship` 违反规则 |
 
-第二层按配置执行合成案例、有限状态模型检查及可选执行轨迹检查；检查未完成或疑点未解决时不能交付。两个脚本独立生成报告，第三层及整体交付判断由人工完成。
+以下摘自实际运行生成的缺陷报告，仅保留相关字段，省略本机路径、时间戳等元数据：
+
+```json
+{
+  "verdict": "FAIL",
+  "model_check": {"verdict": "PASS"},
+  "trace_check": {
+    "verdict": "FAIL",
+    "reason": "guard_not_satisfied",
+    "step": 1,
+    "action": "ship",
+    "before": {"paid": false, "shipped": false},
+    "after": {"paid": false, "shipped": true},
+    "requirement": "REQ-ORDER-001"
+  }
+}
+```
 
 ## 快速开始
 
-从仓库根目录运行以下命令。依赖为 NumPy 和 SciPy；当前已在 Windows / Python 3.13 环境验证。
+推荐使用 **64 位 Python 3.13**。依赖为 NumPy、SciPy；首次安装需要联网，安装完成后订单演示可离线运行。
 
-```bash
+### 获取源码
+
+```text
 git clone https://github.com/yuye05/verification-gate-review.git
 cd verification-gate-review
-python -m pip install -r requirements.txt
 ```
 
-仓库提供可直接运行的付款—发货流程示例：
+没有 Git 时，在仓库页面选择 **Code → Download ZIP**，完整解压后进入包含 `requirements.txt` 的目录。不要直接在压缩包里运行，也不要仅下载一个脚本。
+
+### Windows PowerShell
+
+在源码目录运行，不需要激活虚拟环境或修改 PowerShell 执行策略：
+
+```powershell
+python --version
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -X utf8 examples/microservice_order/run_demo.py
+```
+
+若 `python --version` 不是 3.13，可使用已安装的 `py -3.13` 创建环境。安装步骤报错时先停止，解决错误后再继续。
+
+### Linux / macOS
+
+下面是对应的操作方式；当前本机验证范围为 Windows，Linux/macOS 尚未实测。
 
 ```bash
-python -X utf8 scripts/check_consistency.py --config examples/microservice_order/gate_config.json
-python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config.json
+python3.13 --version
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -X utf8 examples/microservice_order/run_demo.py
 ```
 
-预期：两个脚本通过；正确模型声明 4 个状态组合，穷尽 3 个可达状态。
-报告生成到 `examples/microservice_order/reports/pass/`。
+后文的 `python` 均指这个虚拟环境的解释器；未激活时继续使用上面的完整路径。
 
-再运行故意缺少付款守卫的负对照：
+### 查看结果
 
-```bash
-python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config_buggy.json
+安装后每次只需一条命令：
+
+```text
+python -X utf8 examples/microservice_order/run_demo.py
 ```
 
-预期：**FAIL，退出码 1**，关联需求 `REQ-ORDER-001`，反例为“初始状态 → 未付款直接发货”。
-这是预期的缺陷检测结果；报告生成到示例的 `reports/negative_control/`。
-第三层记录见[对抗性审查清单](examples/microservice_order/docs/对抗性审查清单.md)。
+输出应包含：
 
-## 演示：模型正确，程序仍可能出错
-
-本地[订单程序](examples/microservice_order/order_program.py)独立实现付款与发货，不读取模型；每个已执行动作记录实际的前后状态。
-先生成正常轨迹，再用同一正确模型检查：
-
-```bash
-python -X utf8 examples/microservice_order/order_program.py --scenario normal --out examples/microservice_order/reports/normal_trace.json
-python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config_trace.json
+```text
+normal: 模型 PASS / 轨迹 PASS / 符合预期
+unpaid_shipping: 模型 PASS / 轨迹 FAIL / 符合预期
+  原因: guard_not_satisfied；步骤: 1；动作: ship；需求: REQ-ORDER-001
+演示成功：正常场景通过，缺陷场景被准确检出。
 ```
 
-预期：模型 PASS、轨迹 PASS、退出码 0。报告位于 `examples/microservice_order/reports/trace_pass/`。
+每次在 `examples/microservice_order/reports/demo/run-<唯一编号>/` 下保存模型副本、两份轨迹、配置及报告，终端会打印绝对路径。已有报告不会被覆盖；示例源文件不会被改写。
 
-再运行故意漏掉付款检查的程序：
+自定义输出根目录：
 
-```bash
-python -X utf8 examples/microservice_order/order_program.py --scenario unpaid_shipping --out examples/microservice_order/reports/unpaid_shipping_trace.json
-python -X utf8 scripts/synthetic_check.py --config examples/microservice_order/gate_config_trace_buggy.json
+```text
+python -X utf8 examples/microservice_order/run_demo.py --outdir "my reports"
 ```
 
-预期：**模型仍 PASS，轨迹 FAIL，总体退出码 1**。报告定位第 1 步 `ship`：付款守卫未满足，实际发货状态也违反 `REQ-ORDER-001`。
-报告位于示例的 `reports/trace_negative_control/`。程序生成轨迹成功不代表验证通过，须查看第二条命令的结果。
+演示入口的 `--outdir` 相对于**当前工作目录**；默认输出位于示例目录。可从任意目录用脚本绝对路径运行。底层检查脚本仍遵循原约定：配置内的路径和其 `--outdir` 相对于**配置文件目录**。
 
-轨迹检查按顺序核对初始状态、记录连续性、动作守卫、状态赋值及不变量。合法记录尚未到达声明的终止状态时返回 INCONCLUSIVE。
-模型 BFS 的反例是模型中最短的动作路径；轨迹报告给出本次运行首次违规的位置和执行前缀。
-
-## 在自己的项目中使用
-
-1. 参考[配置说明](references/configuration.md)和[配置模板](references/gate_config.example.json)，创建项目的 `gate_config.json`。
-2. 指定权威数字来源、扫描文件和需执行的算法/模型检查；如启用轨迹检查，先采集符合约定的执行记录。模板中的光学路径及旧数字是示例，使用前须替换。
-3. 运行两个脚本，处理 FAIL 项，并复核 WARN 和孤儿候选。
-4. 针对核心结论填写 `对抗性审查清单.md`，注明检查范围后再交付。
-
-```bash
-python -X utf8 scripts/check_consistency.py --config /path/to/gate_config.json
-python -X utf8 scripts/synthetic_check.py --config /path/to/gate_config.json
-```
-
-配置中的相对路径以**配置文件所在目录**为基准。两个脚本均支持 `--outdir` 覆盖报告目录。
-第二层至少配置一项光学检查、`generic_check` 或 `model_check`；未配置的检查不会被当作已执行。
-`trace_check` 必须同时配置 `model_check`，使用同一模型且要求声明非空 `terminals`。详细格式见[轨迹配置](references/configuration.md#执行轨迹检查)。
-
-## 判定与产物
-
-| 检查 | 判定规则 |
+| 演示退出码 | 含义 |
 |---|---|
-| 一致性 | 旧数字或旧文本命中即 FAIL；核心数字缺失为 WARN；孤儿数字列为复核候选 |
-| 算法自检 | 误差须严格小于阈值；空案例、非有限结果、形状不符和算法异常不能通过 |
-| 模型检查 | 不变量违例或非终止死锁为 FAIL；达到状态上限为 INCONCLUSIVE，阻止通过 |
-| 轨迹检查 | 动作、守卫、状态变化、连续性或不变量违规为 FAIL；合法未终止为 INCONCLUSIVE，阻止通过 |
-| 对抗性审查 | 人工确认质疑点已有依据和答辩，明确记录未解决事项 |
+| `0` | 两个场景都符合预期：正常通过、缺陷被准确检出 |
+| `1` | 检查结果与演示预期不符 |
+| `2` | 运行或输入错误，例如缺依赖、缺文件、报告损坏或输出不可写 |
 
-| 退出码 | 含义 |
+**演示成功不代表缺陷程序通过，也不代表整套交付门禁通过。** 演示只运行模型与轨迹检查；底层检查器检测到缺陷时仍返回 `1`。演示入口会同时核对该退出码和本次报告，避免把崩溃当成成功检出。
+
+### 安装与运行问题
+
+| 问题 | 处理方式 |
 |---|---|
-| `0` | 该脚本通过；一致性结果仍可能包含 WARN/候选 |
-| `1` | 检查失败，模型检查未穷尽，或轨迹尚未到达终止状态 |
-| `2` | 配置或输入错误 |
+| 缺少 NumPy/SciPy | 使用同一个 `.venv` 解释器执行 `-m pip install -r requirements.txt`；不要混用系统 pip |
+| 下载失败或找不到匹配版本 | 确认是 64 位 Python 3.13，并检查网络、代理或包索引；保留完整错误，不关闭 TLS 校验 |
+| 创建环境时报 `ensurepip`/权限错误 | 确认 Python 安装完整，项目目录和系统临时目录可写；受限执行环境可能需要在普通终端创建环境，不修改项目校验逻辑 |
+| Linux 提示缺少 venv | 安装该系统发行版提供的 Python 3.13 venv 组件后重试 |
+| 路径有中文或空格 | 给完整路径加引号；PowerShell 调用带引号的程序路径时在前面加 `&`；保留 `-X utf8` |
+| 找不到报告 | 以本次终端打印的绝对路径为准；演示失败时不要拿以前的报告代替 |
+| 报告是 FAIL/INCONCLUSIVE | 检查具体原因；缺陷演示的 FAIL 是预期结果，自己项目的 FAIL/INCONCLUSIVE 不能放行 |
 
-输出包括 `门禁报告_一致性.md`、`门禁报告_合成自检.json` 和人工整理的 `对抗性审查清单.md`。
-JSON 报告包含所运行检查、误差、模型反例或轨迹违规位置，以及配置/模型/已检查轨迹的 SHA-256。
-运行报告含时间戳与本机路径，作为本地证据使用，不随源码提交。
+## 接入自己的项目
 
-整套门禁通过要求：一致性无 FAIL、第二层所配检查全部通过、WARN/候选已复核、对抗清单已有答辩依据。
-两个脚本独立运行，不自动汇总第三层；执行出错时不能用旧报告替代本次证据。
+从[最小接入教程](references/workflow-quickstart.md)开始：定义有限状态与规则 → 在实际动作前后记录状态 → 运行检查 → 阅读报告。
 
-## 能力边界
+- [订单程序](examples/microservice_order/order_program.py)展示独立采集；不读取模型，也不从模型生成“实际状态”。
+- [配置与轨迹格式](references/configuration.md)说明 JSON 字段及判定规则。
+- [修改守卫的练习](references/workflow-quickstart.md#练习修改模型守卫)演示模型本身出错时的区别。
 
-- 数字检查按数值和容差匹配，不理解句子语义，不自动换算物理单位或百分比；孤儿候选仍采用启发式。
-- 合成测试只覆盖所选输入，不能据此证明算法在全部输入上正确。
-- 模型检查穷尽的是声明的有限模型，不验证实际服务代码、分布式消息行为、活性或公平性。
-- 轨迹检查只验证已记录的顺序执行及其显式状态；日志完整性、状态映射和采集代码仍需人工复核。SHA-256 标识输入文件，不证明日志来源可信。示例为本地程序，不是已部署的微服务。
-- `generic_check` 会导入执行本地 Python 模块，只使用来源可信、已经审查的代码。
-- 本工具不替代论文结构审查、代码审查或真实系统测试。
+普通断言适合在代码中即时阻止错误，单元测试适合验证选定输入；本工具补充有限模型的状态搜索和记录后的轨迹核对。是否值得接入，取决于这些证据是否能抵消建模和采集成本。
+
+## 其他能力与边界
+
+[进阶使用](references/advanced-usage.md)保留数值一致性、通用算法/光学案例、三层门禁、手动运行各步骤及 Skill 用法。详细原理见[设计说明](references/design-notes.md)。
+
+- 模型检查只穷尽声明的有限模型；达到状态上限返回 INCONCLUSIVE，不能当作证明完成。
+- 轨迹检查只覆盖已记录的单实例顺序执行；不验证并发、分布式消息、活性或公平性。
+- 日志完整性、状态映射、抽象假设仍需人工复核。SHA-256 标识输入，不证明日志来源真实。
+- 数字扫描不理解语义或自动换算单位；合成测试不证明全部输入正确。
+- `generic_check` 会执行本地 Python 模块，只使用来源可信、已经审查的代码。
+- 工具不自动理解任意源码，不替代单元测试、代码审查或真实系统测试。
 
 ## 验证与开发
 
-```bash
-python -X utf8 evals/check_regressions.py
-python -X utf8 scripts/synthetic_check.py --config references/gate_config.example.json --outdir ../evals/optical_smoke
-```
-
-当前回归入口包含 86 项检查，覆盖正常结果、缺陷负例、配置错误、数值边界、模型状态上限及程序轨迹。
-光学示例包含 9 个还原案例和 kurtosis 判据。实际判定以本次命令输出为准。
-贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，待发布变更见 [CHANGELOG.md](CHANGELOG.md)。
-
-## 作为 Skill 使用
-
-本仓库提供 [SKILL.md](SKILL.md)。放入使用环境支持的 Skill 目录后，明确要求“跑门禁”或“用 verification-gate”调用。
-Claude Code 可使用 `~/.claude/skills/verification-gate-review/`；其他环境按其 Skill 安装约定处理。
-该 Skill **仅手动触发**，不因普通“检查/审查”措辞自动执行。
-
-## 仓库结构
-
 ```text
-verification-gate-review/
-├── README.md / SKILL.md
-├── LICENSE / AUTHORSHIP.md
-├── CONTRIBUTING.md / CHANGELOG.md
-├── requirements.txt
-├── scripts/                  # 一致性、合成自检、有限模型与轨迹检查
-├── references/               # 配置说明、模板、设计与后续方向
-├── examples/microservice_order/
-│   ├── *.json                # 配置、正确模型、缺陷模型与预期值
-│   ├── order_program.py      # 独立订单程序及缺陷实现，生成实际轨迹
-│   └── docs/                 # 结果说明与对抗清单
-└── evals/                    # 回归入口与 Skill 使用评估案例
+python -X utf8 evals/check_regressions.py
+python -X utf8 evals/check_demo.py
 ```
 
-实现选择和后续方向见[设计说明](references/design-notes.md)。
+现有回归入口包含 86 项检查；另有 6 项演示端到端测试，覆盖正反例、重复运行、非仓库工作目录、中文/空格路径、异常与报告校验。两套测试均在独立临时目录运行。
+
+本轮已在 Windows / Python 3.13.14 的独立虚拟环境安装并验证 NumPy 2.5.4、SciPy 1.18.1。依赖版本是本次实测记录，不是所有版本的兼容承诺。
+仓库提供 Windows/Ubuntu、Python 3.13 的 [CI 配置](.github/workflows/checks.yml)；远端尚未执行，macOS 尚未实测。
+
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，变更见 [CHANGELOG.md](CHANGELOG.md)。反馈请提供运行命令、版本、预期与实际结果，并脱敏报告中的路径和业务数据。
 
 ## 许可证与作者
 
