@@ -63,7 +63,7 @@ python -m venv .venv
 
 ### Linux / macOS
 
-下面是对应的操作方式；当前本机验证范围为 Windows，Linux/macOS 尚未实测。
+下面是对应的操作方式。Ubuntu 已在 GitHub Actions 中通过依赖安装、回归检查与演示；以下虚拟环境安装步骤未在 Linux 实机逐条验证，macOS 尚未实测。
 
 ```bash
 python3.13 --version
@@ -152,7 +152,7 @@ python -X utf8 evals/check_demo.py
 现有回归入口包含 86 项检查；另有 6 项演示端到端测试，覆盖正反例、重复运行、非仓库工作目录、中文/空格路径、异常与报告校验。两套测试均在独立临时目录运行。
 
 本轮已在 Windows / Python 3.13.14 的独立虚拟环境安装并验证 NumPy 2.5.4、SciPy 1.18.1。依赖版本是本次实测记录，不是所有版本的兼容承诺。
-仓库提供 Windows/Ubuntu、Python 3.13 的 [CI 配置](.github/workflows/checks.yml)；远端尚未执行，macOS 尚未实测。
+2026-11-13，提交 `011a179` 的 [GitHub Actions 检查](https://github.com/yuye05/verification-gate-review/actions/runs/43448234837)在 Windows 和 Ubuntu 的 Python 3.13 环境中通过了依赖安装、核心回归、演示测试和实际演示。后续提交以最新 Actions 结果为准；macOS 尚未实测。
 
 贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，变更见 [CHANGELOG.md](CHANGELOG.md)。反馈请提供运行命令、版本、预期与实际结果，并脱敏报告中的路径和业务数据。
 
