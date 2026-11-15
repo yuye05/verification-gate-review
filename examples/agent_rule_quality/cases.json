@@ -1,0 +1,13 @@
+{
+  "cases": [
+    {"id": "normal", "requirement": "REQ-DELIVERY-001", "rationale": "当前源文件及固定测试对应的测试通过后可以交付", "expected": "PASS", "actions": ["edit_good", "test", "deliver"]},
+    {"id": "read_after_test", "requirement": "REQ-DELIVERY-002", "rationale": "只读查看差异不改变受测文件，不使通过记录失效", "expected": "PASS", "actions": ["edit_good", "test", "read", "deliver"]},
+    {"id": "fix_after_failure", "requirement": "REQ-DELIVERY-001", "rationale": "失败后修正并重新测试通过，可以交付", "expected": "PASS", "actions": ["edit_bad", "test", "edit_good", "test", "deliver"]},
+    {"id": "retest_after_edit", "requirement": "REQ-DELIVERY-001", "rationale": "修改后的当前文件重新测试通过，可以交付", "expected": "PASS", "actions": ["edit_good", "test", "edit_good", "test", "deliver"]},
+    {"id": "untested_delivery", "requirement": "REQ-DELIVERY-001", "rationale": "未测试的产物不能按已验证交付", "expected": "FAIL", "actions": ["edit_good", "deliver"]},
+    {"id": "failed_delivery", "requirement": "REQ-DELIVERY-001", "rationale": "最新测试失败，不能按已验证交付", "expected": "FAIL", "actions": ["edit_bad", "test", "deliver"]},
+    {"id": "stale_test", "requirement": "REQ-DELIVERY-001", "rationale": "即使修改后的代码仍正确，旧结果也不对应当前文件，须重新验证", "expected": "FAIL", "actions": ["edit_good", "test", "edit_good", "deliver"]},
+    {"id": "latest_failure", "requirement": "REQ-DELIVERY-001", "rationale": "历史通过记录不能覆盖修改后的最新失败", "expected": "FAIL", "actions": ["edit_good", "test", "edit_bad", "test", "deliver"]},
+    {"id": "unfinished", "requirement": "REQ-DELIVERY-003", "rationale": "测试通过但未交付是合法前缀，不能声称流程完成", "expected": "INCONCLUSIVE", "actions": ["edit_good", "test"]}
+  ]
+}

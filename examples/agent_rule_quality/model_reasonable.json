@@ -1,0 +1,15 @@
+{
+  "name": "current-test-before-delivery",
+  "variables": {"validation": ["untested", "passed", "failed"], "ever_passed": [false, true], "last_test": [false, true], "delivered": [false, true]},
+  "initial": {"validation": "untested", "ever_passed": false, "last_test": false, "delivered": false},
+  "transitions": [
+    {"id": "edit_good", "guard": {"delivered": false}, "set": {"validation": "untested", "last_test": false}},
+    {"id": "edit_bad", "guard": {"delivered": false}, "set": {"validation": "untested", "last_test": false}},
+    {"id": "test_pass", "guard": {"delivered": false}, "set": {"validation": "passed", "ever_passed": true, "last_test": true}},
+    {"id": "test_fail", "guard": {"delivered": false}, "set": {"validation": "failed", "last_test": true}},
+    {"id": "read", "guard": {"delivered": false}, "set": {"last_test": false}},
+    {"id": "deliver", "guard": {"delivered": false, "validation": "passed"}, "set": {"delivered": true}}
+  ],
+  "invariants": [{"id": "passed_has_history", "when": {"validation": "passed"}, "assert": {"ever_passed": true}}],
+  "terminals": [{"delivered": true}]
+}

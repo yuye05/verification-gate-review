@@ -10,11 +10,14 @@ cd verification-gate-review
 python -m pip install -r requirements.txt
 python -X utf8 evals/check_regressions.py
 python -X utf8 evals/check_demo.py
+python -X utf8 evals/check_rule_quality.py
 python -X utf8 examples/microservice_order/run_demo.py
+python -X utf8 examples/agent_rule_quality/run_demo.py
 ```
 
 请先按 [README](README.md#快速开始)创建独立虚拟环境；上面的 `python` 指该环境解释器，不需要激活环境。
 当前已在 Windows / Python 3.13 验证。86 项核心回归与 6 项演示端到端测试分开计数；演示测试会在独立副本中注入错误，不改动原例子。
+规则体检另有 14 项测试。修改该功能时请同时核对误拦、漏检、INCONCLUSIVE 与输入错误；故意注入的测试故障不能被算作真实 Agent 故障。
 Windows/Ubuntu 的 GitHub Actions 工作流已配置，远端执行结果以 Actions 页面为准；本机测试不能替代 Ubuntu/macOS 验证。
 光学与分步订单命令见[进阶使用](references/advanced-usage.md)。
 
@@ -31,6 +34,8 @@ Windows/Ubuntu 的 GitHub Actions 工作流已配置，远端执行结果以 Act
 3. 运行回归入口并检查 `git diff --check`，说明改变的行为、理由和验证结果。
 4. 记录到 [CHANGELOG.md](CHANGELOG.md) 的 Unreleased 部分。
 5. 不提交缓存、虚拟环境、运行报告、本机路径快照或敏感输入。
+
+规则体检的案例预期须有独立需求依据，至少包含合法与违规案例；不能根据待测模型结果反向修改标签使其通过。接入方式见[规则体检教程](references/rule-quality-quickstart.md)。
 
 ## 贡献权利与辅助工具
 

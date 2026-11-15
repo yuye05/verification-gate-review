@@ -8,6 +8,27 @@
 
 A small Python tool for checking finite-state models and recorded sequential executions. The payment/shipping demo shows how a valid model can coexist with a buggy implementation. It checks declared models and observed traces, not arbitrary source code or all system behavior.
 
+## 试验功能：规则体检
+
+**规则会不会把合法流程拦住，又让违规流程通过？** 新入口用独立标注的案例检查现有 JSON 规则，报告误拦、漏检和具体执行证据。
+
+```text
+python -X utf8 examples/agent_rule_quality/run_demo.py
+```
+
+使用下方安装说明中的 Python；该演示本身仅需标准库，可离线运行。程序实际修改微型 Python 项目、运行固定测试并采集状态，以同一批 9 个案例体检三套规则：
+
+| 待测规则 | 模型检查 | 规则体检 | 检出的问题 |
+|---|---|---|---|
+| 当前版本测试通过才交付 | PASS | PASS，9/9 匹配 | 所提供案例无误判 |
+| 历史上测试通过就交付 | PASS | FAIL | 漏检 2 例：修改后未重测、最新测试失败 |
+| 测试必须紧挨着交付 | PASS | FAIL | 误拦 1 例：测试后只读查看差异 |
+
+演示只有三套诊断均符合预期才返回 `0`；每次保留独立报告，终端打印路径。**这是脚本控制的真实本地执行，缺陷规则为故意注入，尚未接入自主 Agent。** 通过只覆盖独立标注的案例，不证明规则完整或测试充分。
+
+- [案例、需求依据与演示输出](examples/agent_rule_quality/README.md)
+- [接入自己的规则与案例](references/rule-quality-quickstart.md)：`check_rule_quality.py --model ... --suite ...`
+
 ## 演示结果
 
 规则很简单：**发货前必须已付款**。正确模型有 4 个状态组合，其中 3 个可达；两个独立程序分别执行正常流程和故意漏掉付款检查的流程。
@@ -147,9 +168,12 @@ python -X utf8 examples/microservice_order/run_demo.py --outdir "my reports"
 ```text
 python -X utf8 evals/check_regressions.py
 python -X utf8 evals/check_demo.py
+python -X utf8 evals/check_rule_quality.py
 ```
 
 现有回归入口包含 86 项检查；另有 6 项演示端到端测试，覆盖正反例、重复运行、非仓库工作目录、中文/空格路径、异常与报告校验。两套测试均在独立临时目录运行。
+
+规则体检另有 14 项测试，覆盖三套规则、三值判定、案例校验、模型搜索上限、实际采集、CLI 路径和错误处理。2026-11-15 已在 Windows / Python 3.13.14 本地通过；新增 CI 步骤的 Windows/Ubuntu 远端结果需在本次变更推送后确认。
 
 本轮已在 Windows / Python 3.13.14 的独立虚拟环境安装并验证 NumPy 2.5.4、SciPy 1.18.1。依赖版本是本次实测记录，不是所有版本的兼容承诺。
 2026-11-13，提交 `011a179` 的 [GitHub Actions 检查](https://github.com/yuye05/verification-gate-review/actions/runs/43448234837)在 Windows 和 Ubuntu 的 Python 3.13 环境中通过了依赖安装、核心回归、演示测试和实际演示。后续提交以最新 Actions 结果为准；macOS 尚未实测。

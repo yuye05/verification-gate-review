@@ -161,6 +161,7 @@ BFS 遍历可达状态，以父节点和动作回溯最短反例。穷尽后才�
 
 ## 输出及迁移
 
+- 独立的规则体检入口使用 `--model` 和带预期标签的 `--suite`，不纳入旧合成检查总判定。格式、路径和退出码见[规则体检教程](rule-quality-quickstart.md)；原有 `gate_config.json` 无须修改。
 - 一致性输出 Markdown；第二层输出 JSON，`sections_checked` 标明范围，未运行项的 summary 为 null。
 - 退出码 0/1/2 表示脚本通过、检查失败或未完成、配置或输入错误。一致性 0 仍可能含复核项。
 - 从旧版本迁移时，`rel` 已统一为百分数；`abs` 需改用 `abs_tolerance`；callback 须指定 generator。
