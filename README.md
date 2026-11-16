@@ -173,10 +173,10 @@ python -X utf8 evals/check_rule_quality.py
 
 现有回归入口包含 86 项检查；另有 6 项演示端到端测试，覆盖正反例、重复运行、非仓库工作目录、中文/空格路径、异常与报告校验。两套测试均在独立临时目录运行。
 
-规则体检另有 14 项测试，覆盖三套规则、三值判定、案例校验、模型搜索上限、实际采集、CLI 路径和错误处理。2026-11-15 已在 Windows / Python 3.13.14 本地通过；新增 CI 步骤的 Windows/Ubuntu 远端结果需在本次变更推送后确认。
+规则体检另有 14 项测试，覆盖三套规则、三值判定、案例校验、模型搜索上限、实际采集、CLI 路径和错误处理。2026-11-15 已在 Windows / Python 3.13.14 本地通过。
 
 本轮已在 Windows / Python 3.13.14 的独立虚拟环境安装并验证 NumPy 2.5.4、SciPy 1.18.1。依赖版本是本次实测记录，不是所有版本的兼容承诺。
-2026-11-13，提交 `011a179` 的 [GitHub Actions 检查](https://github.com/yuye05/verification-gate-review/actions/runs/43448234837)在 Windows 和 Ubuntu 的 Python 3.13 环境中通过了依赖安装、核心回归、演示测试和实际演示。后续提交以最新 Actions 结果为准；macOS 尚未实测。
+2026-11-15，提交 `9137e06` 的 [GitHub Actions 检查](https://github.com/yuye05/verification-gate-review/actions/runs/43685423835)在 Windows 和 Ubuntu 的 Python 3.13 环境中通过了依赖安装、核心回归、演示测试、规则体检测试和两个实际演示。后续提交以最新 Actions 结果为准；macOS 尚未实测。
 
 贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，变更见 [CHANGELOG.md](CHANGELOG.md)。反馈请提供运行命令、版本、预期与实际结果，并脱敏报告中的路径和业务数据。
 
